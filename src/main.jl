@@ -4,6 +4,7 @@ include("flags.jl")
 include("dgp.jl")
 include("net_preprocess.jl")
 println(diag(DGP.β_true))
+
 using Plots
 using LightGraphs
 Plots.heatmap(DGP.Θ_true, yflip=true)
