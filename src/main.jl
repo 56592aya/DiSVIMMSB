@@ -9,6 +9,7 @@ Gopalan.communities
 
 using Plots
 using LightGraphs
+
 #Plots.heatmap(adjacency_matrix(ug), yflip=true)
 
 ####using LightGraphs
@@ -19,8 +20,11 @@ for i in 1:nv(NetPreProcess.network)
     gammas[i,:] = Inference.nodes_[i].γ
 end
 Plots.heatmap(gammas, yflip=true)
+# savefig("gamma_est.png")
 Plots.heatmap(DGP.Θ_true, yflip=true)
-Plots.heatmap(DGP.adj_matrix, yflip=true)
+# savefig("theta_true.png")
+Plots.heatmap(NetPreProcess.adj_matrix, yflip=true)
+# savefig("adj_matrix.png")
 
 
 est_Θ=zeros(Float64, (nv(NetPreProcess.network), Inference.K_))
@@ -30,7 +34,7 @@ for i in 1:nv(NetPreProcess.network)
     end
 end
 Plots.heatmap(est_Θ, yflip=true)
-
+# savefig("theta_est.png")
 open("./file2", "w") do f
   for k in 1:Inference.K_
     for i in 1:nv(NetPreProcess.network)

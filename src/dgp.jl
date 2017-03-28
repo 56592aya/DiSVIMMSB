@@ -10,6 +10,7 @@ using DataFrames
 using Distributions
 using Utils
 using StatsBase
+using Yeppp
 ###############################################################
 ###############################################################
 ################  INITTING TRUE VALUES  #######################

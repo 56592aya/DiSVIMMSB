@@ -90,9 +90,9 @@ s_send_temp = s_recv_temp=0.0
 node_ϕ_send = zeros(Float64, (length(nodes_), K_))
 node_ϕ_recv = zeros(Float64, (length(nodes_), K_))
 for (index,nl) in enumerate(nonedges_)
-    push!(nonlinks_, NonLink(index, nl.first, nl.second, node_ϕ_send[nl.first,:], node_ϕ_recv[nl.second,:]))
+    push!(nonlinks_, NonLink(index, nl.first, nl.second, view(node_ϕ_send,nl.first,1:K_), view(node_ϕ_recv,nl.second,1:K_)))
     if nl in training_nonlinks_pairs
-        push!(train_nonlinks_, NonLink(index, nl.first, nl.second, node_ϕ_send[nl.first,:], node_ϕ_recv[nl.second,:]))
+        push!(train_nonlinks_, NonLink(index, nl.first, nl.second, view(node_ϕ_send,nl.first,1:K_), view(node_ϕ_recv,nl.second,1:K_)))
     end
 end
 mb_nodes = 1:nv(network)
