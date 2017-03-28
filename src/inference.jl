@@ -12,6 +12,7 @@ using LightGraphs
 using FLAGS
 using StatsBase
 using Distributions
+using Gopalan
 #using Plots
 using LightGraphs
 
@@ -109,7 +110,7 @@ end
 train_nonlinks_ids = [l.id for l in train_nonlinks_]
 
 ###############################################################
-include("gopalan.jl")
+
 comms = Gopalan.communities
 Belong = Dict{Int64, Vector{Int64}}()
 for node in nodes_

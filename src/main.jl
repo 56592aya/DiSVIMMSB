@@ -3,6 +3,9 @@ include("utils.jl")
 include("flags.jl")
 include("dgp.jl")
 include("net_preprocess.jl")
+include("gopalan.jl")
+using Gopalan
+Gopalan.communities
 println(diag(DGP.β_true))
 
 using Plots
@@ -14,7 +17,6 @@ Plots.heatmap(DGP.adj_matrix, yflip=true)
 ####using LightGraphs
 ###neighborhood(NetPreProcess.network, 6, 2, dir=:out)
 include("inference.jl")
-Inference.comms
 gammas = zeros(Float64, (nv(NetPreProcess.network), Inference.K_))
 for i in 1:nv(NetPreProcess.network)
     gammas[i,:] = Inference.nodes_[i].γ
