@@ -1,0 +1,14 @@
+__precompile__()
+module FLAGS
+FLAG_DGP_=true
+INIT_TRUTH = false
+INIT_RAND = true
+EXTRA_COMM = false
+ANNEAL_PHI = false
+ANNEAL_GAMMA=false
+MAX_ITER = 250
+
+
+export FLAG_DGP_, INIT_TRUTH,INIT_RAND, EXTRA_COMM, MAX_ITER,ANNEAL_PHI,ANNEAL_GAMMA
+
+end
