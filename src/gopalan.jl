@@ -2,13 +2,10 @@ __precompile__()
 module Gopalan
 
 using Utils
-using DGP
-using FLAGS
 using NetPreProcess
 using LightGraphs
 using Distributions
 using DataStructures
-using Plots
 using DoWhile
 using DataFrames
 ###########
@@ -21,19 +18,20 @@ import Base.zeros
 Base.zero(::Type{KeyVal}) = KeyVal(0,0.0)
 
 N_=nv(network)
-K_ = 5
+topK = 5
 alpha = 1.0/N_
-gamma = [KeyVal(0,0.0) for i=1:N_, j=1:K_]
+gamma = [KeyVal(0,0.0) for i=1:N_, j=1:topK]
 gammanext = [Dict{Int64, Int64}() for i in 1:N_]
 maxgamma = zeros(Int64,N_)
 communities = Dict{Int64, Vector{Int64}}()
-edges_ = Vector{Pair{Int64, Int64}}()
+ulinks = Vector{Pair{Int64, Int64}}()
 #undirected
 for (i,v) in enumerate(edges(network))
-  if v.first < v.second
-    push!(edges_,v.first=>v.second)
+  if src(v) < dst(v)
+    push!(ulinks,src(v)=>dst(v))
   end
 end
+
 function sort_by_values(v::Vector{KeyVal})
   d = DataFrame()
   d[:X1] = [i for i in 1:length(v)]
@@ -59,21 +57,21 @@ function init_gamma(gamma, maxgamma)
       gamma[i,1].first=i
       gamma[i,1].second = 1.0 + rand()
       maxgamma[i] = i
-      for j in 2:K_
+      for j in 2:topK
         gamma[i,j].first = (i+j-1)%N_
         gamma[i,j].second = rand()
       end
   end
 end
 #####estimate all thetas
-function estimate_thetas(gamma)
-  theta_est = [KeyVal(0,0.0) for i=1:N,j=1:K_]
-  for i in 1:N_
+function estimate_thetas(gamma,N,topK)
+  theta_est = [KeyVal(0,0.0) for i=1:N,j=1:topK]
+  for i in 1:N
     s = 0.0
-    for k in 1:K_
+    for k in 1:topK
       s += gamma[i,k].second
     end
-    for k in 1:K_
+    for k in 1:topK
       theta_est[i,k].first  = gamma[i,k].first
       theta_est[i,k].second = gamma[i,k].second*1.0/s
     end
@@ -81,14 +79,14 @@ function estimate_thetas(gamma)
   return theta_est
 end
 function log_groups(communities, theta_est)
-  for link in edges_
+  for link in ulinks
     i = link.first;m=link.second;
     # if i < m
       max_k = 65535
       max = 0.0
       sum = 0.0
-      for k1 in 1:K_
-        for k2 in 1:K_
+      for k1 in 1:topK
+        for k2 in 1:topK
           if theta_est[i,k1].first == theta_est[m,k2].first
             u = theta_est[i,k1].second * theta_est[m,k2].second
             sum += u
@@ -155,7 +153,7 @@ end
 init_gamma(gamma, maxgamma)
 function batch_infer()
   for iter in 1:ceil(Int64, log10(N_))
-    for link in edges_
+    for link in ulinks
       p = link.first;q = link.second;
       pmap = gammanext[p]
       qmap = gammanext[q]
@@ -174,10 +172,10 @@ function batch_infer()
       m = gammanext[i]
       sz = 0
       if length(m) != 0
-        if length(m) > K_
+        if length(m) > topK
           sz = length(m)
         else
-          sz = K_
+          sz = topK
         end
         v = [KeyVal(0,0.0) for z in 1:sz]
         c = 1
@@ -186,7 +184,7 @@ function batch_infer()
           v[c].second = j.second
           c += 1
         end
-        while c <= K_ #assign random communities to rest
+        while c <= topK #assign random communities to rest
           k=0
           @do begin
              k = sample(1:N_)
@@ -198,7 +196,7 @@ function batch_infer()
 
         v = sort_by_values(v)
         gamma[i,:]
-        for k in 1:K_
+        for k in 1:topK
           gamma[i,k].first = v[k].first
           gamma[i,k].second = v[k].second + alpha
         end
@@ -208,7 +206,7 @@ function batch_infer()
     end
     ###SETGAMMA END
   end
-  theta_est = estimate_thetas(gamma)
+  theta_est = estimate_thetas(gamma,N_,topK)
   return log_groups(communities, theta_est)
 end
 ##############

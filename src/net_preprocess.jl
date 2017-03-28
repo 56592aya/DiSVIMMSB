@@ -24,11 +24,11 @@ network  = DiGraph()
 if(FLAG_DGP_)
     include("dgp.jl")
     using DGP
-    N_=size(adj_matrix)[1]
+    N_=size(adj)[1]
     network  = DiGraph(N_)
     for b in 1:N_
         for a in 1:N_
-            if adj_matrix[a,b] == 1
+            if adj[a,b] == 1
                 add_edge!(network, a, b)
             end
         end
@@ -40,6 +40,7 @@ else                                     #### or read from data
     network = induced_subgraph(network, vertices)[1]
     ####
 end
+adj_matrix = LightGraphs.adjacency_matrix(network)
 ##########################################################################
 ##########################################################################
 ####################  OTHER HELPFUL NETWORK OBJECTS ######################
@@ -49,7 +50,7 @@ end
 # (non)sinks, (non)sources,in_degrees, out_degrees,
 ##Maybe better to work with array of pairs
 edges_ = Array{Pair{Int64, Int64},1}(ne(network))
-[edges_[index] = value for (index,value) in enumerate(edges(network))]
+[edges_[index] = src(value)=>dst(value) for (index,value) in enumerate(LightGraphs.edges(network))]
 sinks = fadj(network)
 sources = badj(network)
 non_sinks=[setdiff(deleteat!(Vector(1:nv(network)), index), value) for (index,value) in enumerate(sinks) ]
@@ -93,7 +94,7 @@ for i in 1:size(x)[1]
 end
 
 comms = arr
-export network, edges_, nonedges_, sinks, sources, non_sinks, non_sources, pairs_total,in_degrees,out_degrees,comms
+export network, edges_, nonedges_, sinks, sources, non_sinks, non_sources, pairs_total,in_degrees,out_degrees,comms, adj_matrix
 ###############################################################
 ##############################################################
 

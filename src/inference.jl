@@ -12,7 +12,6 @@ using LightGraphs
 using FLAGS
 using StatsBase
 using Distributions
-using Gopalan
 #using Plots
 using LightGraphs
 
@@ -42,12 +41,12 @@ if EXTRA_COMM
 end
 if FLAGS.INIT_TRUTH
     K_ = DGP.K_true+extra
-else
-    K_ = round(Int,nv(NetPreProcess.network)/35)+extra
-    #K_= 2
 end
-println("num communities: $K_")
-
+println("num true communities: $(DGP.K_true)")
+import Gopalan
+comms = Gopalan.communities
+K_ = length(comms)
+println("num intiialized communities: $K_")
 ###############################################################
 ###############################################################
 nodes_ = Array{Node,1}()
@@ -98,6 +97,7 @@ for (index,nl) in enumerate(nonedges_)
 end
 mb_nodes = 1:nv(network)
 mb_links = [l.id for l in train_links_]
+
 mb_nonlinks = Array{Int64,1}()
 mb_nonsources_length = zeros(Int64, length(mb_nodes))
 mb_nonsinks_length = zeros(Int64, length(mb_nodes))
@@ -111,7 +111,6 @@ train_nonlinks_ids = [l.id for l in train_nonlinks_]
 
 ###############################################################
 
-comms = Gopalan.communities
 Belong = Dict{Int64, Vector{Int64}}()
 for node in nodes_
   if !haskey(Belong, node.id)
@@ -288,17 +287,17 @@ function edge_likelihood(pair, γ_a, γ_b, β, ϵ)
         s += (γ_a[k]/sum(γ_a))*(γ_b[k]/sum(γ_b))
     end
     if has_edge(network, pair.first, pair.second)
-        prob += (1-s)*ϵ
+        prob += (1.0-s)*ϵ
     else
-        prob += (1-s)*(1-ϵ)
+        prob += (1.0-s)*(1-ϵ)
     end
     return log(prob)
 end
-function update_ϕ_links_send(link, Elog_β, ϵ, early)::Void
-    temp_send = zeros(Float64, K_)
+function update_ϕ_links_send(link, Elog_β, ϵ, early, K_f)::Void
+    temp_send = zeros(Float64, K_f)
     s_send = 0.0
     dependence_dom = 5.0
-    for k in 1:K_
+    for k in 1:K_f
         if early
             dependence_dom = 5.0
         else
@@ -312,74 +311,74 @@ function update_ϕ_links_send(link, Elog_β, ϵ, early)::Void
             s_send=temp_send[k]
         end
     end
-    for k in 1:K_
+    for k in 1:K_f
         link.ϕ_send[k] = exp(temp_send[k] - s_send)
     end
 end
-function update_ϕ_links_recv(link, Elog_β, ϵ, early)::Void
-    temp_recv = zeros(Float64, K_)
-    s_recv = 0.0
-    dependence_dom = 5.0
-    for k in 1:K_
-        if early
-            dependence_dom = 5.0
-        else
-            dependence_dom = Elog_β[k,1]-log(ϵ)
-        end
-        temp_recv[k] = link.ϕ_send[k]*(dependence_dom) + nodes_[link.second].Elog_Θ[k]
-        if k > 1
-            s_recv = Utils.logsumexp(s_recv,temp_recv[k])
-        else
-            s_recv=temp_recv[k]
-        end
-    end
-    for k in 1:K_
-        link.ϕ_recv[k] = exp(temp_recv[k] - s_recv)
-    end
-end
-function update_ϕ_nonlink_send(nonlink, Elog_β, ϵ)::Void
-    temp_nsend = zeros(Float64, K_)
-    s_nsend = 0.0
-    first = nonlink.first
-    second = nonlink.second
-    dep = length(train_links_)*1.0/(length(train_links_)+length(train_nonlinks_))
-    for k in 1:K_
+function update_ϕ_links_recv(link, Elog_β, ϵ, early, K_f)::Void
+  temp_recv = zeros(Float64, K_)
+  s_recv = 0.0
+  dependence_dom = 5.0
+  for k in 1:K_f
       if early
-        dep = length(train_links_)*1.0/(length(train_links_)+length(train_nonlinks_))
+          dependence_dom = 5.0
       else
-        dep =  Elog_β[k,2]-log1p(1-ϵ)
+          dependence_dom = Elog_β[k,1]-log(ϵ)
       end
-        temp_nsend[k] = nonlink.ϕ_nrecv[k]*(dep) + nodes_[first].Elog_Θ[k]
+      temp_recv[k] = link.ϕ_send[k]*(dependence_dom) + nodes_[link.second].Elog_Θ[k]
+      if k > 1
+          s_recv = Utils.logsumexp(s_recv,temp_recv[k])
+      else
+          s_recv=temp_recv[k]
+      end
+  end
+  for k in 1:K_f
+      link.ϕ_recv[k] = exp(temp_recv[k] - s_recv)
+  end
+end
+function update_ϕ_nonlink_send(nonlink_f, Elog_β_f, ϵ_f,K_f,train_links_f,train_nonlinks_f, nodes_f, logsumexp_f,early_f)::Void
+    temp_nsend = zeros(Float64, K_f)
+    s_nsend = 0.0
+    first = nonlink_f.first
+    second = nonlink_f.second
+    dep = length(train_links_f)*1.0/(length(train_links_f)+length(train_nonlinks_f))
+    for k in 1:K_f
+      if early_f
+        dep = length(train_links_f)*1.0/(length(train_links_f)+length(train_nonlinks_f))
+      else
+        dep =  Elog_β_f[k,2]-log1p(1.0-ϵ)
+      end
+        temp_nsend[k] = nonlink_f.ϕ_nrecv[k]*(dep) + nodes_f[first].Elog_Θ[k]
         if k > 1
-            s_nsend = logsumexp(s_nsend,temp_nsend[k])
+            s_nsend = logsumexp_f(s_nsend,temp_nsend[k])
         else
             s_nsend=temp_nsend[k]
         end
     end
-    for k in 1:K_
-        nonlink.ϕ_nsend[k] = exp(temp_nsend[k] - s_nsend)
+    for k in 1:K_f
+        nonlink_f.ϕ_nsend[k] = exp(temp_nsend[k] - s_nsend)
     end
 end
-function update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ)::Void
+function update_ϕ_nonlink_recv(nonlink_f, Elog_β_f, ϵ_f,K_f,train_links_f,train_nonlinks_f, nodes_f, logsumexp_f,early_f)::Void
     s_nrecv = 0.0
-    temp_nrecv = zeros(Float64, K_)
-    first = nonlink.first
-    second = nonlink.second
-    for k in 1:K_
-      if early
-        dep = length(train_links_)*1.0/(length(train_links_)+length(train_nonlinks_))
+    temp_nrecv = zeros(Float64, K_f)
+    first = nonlink_f.first
+    second = nonlink_f.second
+    for k in 1:K_f
+      if early_f
+        dep = length(train_links_f)*1.0/(length(train_links_f)+length(train_nonlinks_f))
       else
-        dep =  Elog_β[k,2]-log1p(1-ϵ)
+        dep =  Elog_β_f[k,2]-log1p(1.0-ϵ_f)
       end
-        temp_nrecv[k] = nonlink.ϕ_nsend[k]*(dep) + nodes_[second].Elog_Θ[k]
+        temp_nrecv[k] = nonlink_f.ϕ_nsend[k]*(dep) + nodes_f[second].Elog_Θ[k]
         if k > 1
-            s_nrecv = logsumexp(s_nrecv,temp_nrecv[k])
+            s_nrecv = logsumexp_f(s_nrecv,temp_nrecv[k])
         else
             s_nrecv=temp_nrecv[k]
         end
     end
-    for k in 1:K_
-        nonlink.ϕ_nrecv[k] = exp(temp_nrecv[k] - s_nrecv)
+    for k in 1:K_f
+        nonlink_f.ϕ_nrecv[k] = exp(temp_nrecv[k] - s_nrecv)
     end
 end
 
@@ -428,11 +427,11 @@ for iter in 1:MAX_ITER
     for lid in mb_links
         link = links_[lid]
         if switch_rounds1
-            update_ϕ_links_recv(link, Elog_β, ϵ, early)
-            update_ϕ_links_send(link, Elog_β, ϵ, early)
+            update_ϕ_links_recv(link, Elog_β, ϵ, early, K_)
+            update_ϕ_links_send(link, Elog_β, ϵ, early, K_)
         else
-            update_ϕ_links_send(link, Elog_β, ϵ, early)
-            update_ϕ_links_recv(link, Elog_β, ϵ, early)
+            update_ϕ_links_send(link, Elog_β, ϵ, early, K_)
+            update_ϕ_links_recv(link, Elog_β, ϵ, early, K_)
         end
         for k in 1:K_
             τ_nxt[k,1] = τ_nxt[k,1] + link.ϕ_send[k]*link.ϕ_recv[k]
@@ -442,11 +441,11 @@ for iter in 1:MAX_ITER
     for nlid in mb_nonlinks
         nonlink = nonlinks_[nlid]
         if switch_rounds1
-            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ)
-            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ)
+            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,train_links_,train_nonlinks_, nodes_, logsumexp,early)
+            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ,K_,train_links_,train_nonlinks_, nodes_, logsumexp,early)
         else
-            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ)
-            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ)
+            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ,K_,train_links_,train_nonlinks_, nodes_, logsumexp,early)
+            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,train_links_,train_nonlinks_, nodes_, logsumexp,early)
         end
 
         for k in 1:K_
