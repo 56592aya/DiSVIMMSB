@@ -20,12 +20,37 @@ for i in 1:nv(NetPreProcess.network)
     gammas[i,:] = Inference.nodes_[i].γ
 end
 Plots.heatmap(gammas, yflip=true)
-# savefig("gamma_est.png")
+savefig("gamma_est.png")
 Plots.heatmap(DGP.Θ_true, yflip=true)
+comm_true = [Int64[] for k in 1:DGP.K_true]
+for i in 1:nv(NetPreProcess.network)
+  for k in 1:DGP.K_true
+    push!(comm_true[indmax(DGP.Θ_true[i,:])],i)
+  end
+end
+for k in 1:DGP.K_true
+  comm_true[k] = unique(comm_true[k])
+end
+
+open("./file_true", "w") do f
+  for k in 1:DGP.K_true
+    for el in comm_true[k]
+      write(f, "$el ")
+    end
+    write(f, "\n")
+  end
+end
 # savefig("theta_true.png")
 Plots.heatmap(NetPreProcess.adj_matrix, yflip=true)
 # savefig("adj_matrix.png")
-
+open("./file_init", "w") do f
+  for k in 1:length(Gopalan.communities)
+    for el in Gopalan.communities[k]
+      write(f, "$el ")
+    end
+    write(f, "\n")
+  end
+end
 
 est_Θ=zeros(Float64, (nv(NetPreProcess.network), Inference.K_))
 for i in 1:nv(NetPreProcess.network)
@@ -70,7 +95,58 @@ open("./net.txt", "w") do f
   end
 end
 
-run(`NMI/onmi file1 file2`)
+run(`NMI/onmi file_true file_init`)
+
+##########
+
+using DataStructures
+using Distributions
+c_est = [Int64[] for k in 1:Inference.K_]
+open("./file4", "w") do f
+  for i in 1:nv(NetPreProcess.network)
+    x = Int64[]
+    x = for j in 1:20
+      push!(x,indmax(rand(Multinomial(1,est_Θ[i,:]),1)))
+    end
+    x = unique(x)
+    for z in x
+      push!(c_est[z],i)
+    end
+  end
+  for k in 1:Inference.K_
+    c_est[k] = unique(c_est[k])
+  end
+  for k in 1:Inference.K_
+    for x in c_est[k]
+      write(f, "$x ")
+    end
+    write(f, "\n")
+  end
+end
+
+c_true = [Int64[] for k in 1:DGP.K_true]
+open("./file3", "w") do f
+  for i in 1:nv(NetPreProcess.network)
+    x = Int64[]
+    x = for j in 1:20
+      push!(x,indmax(rand(Multinomial(1,DGP.Θ_true[i,:]),1)))
+    end
+    x = unique(x)
+    for k in 1:DGP.K_true
+      c_true[k] = unique(c_true[k])
+    end
+  end
+  for k in 1:DGP.K_true
+    for x in c_true[k]
+      write(f, "$x ")
+    end
+    write(f, "\n")
+  end
+end
+
+
+run(`NMI/onmi file3 file4`)
+#####
 
 Plots.heatmap(DGP.Θ_true, yflip=true)
 Plots.heatmap(DGP.adj_matrix, yflip=true)

@@ -15,6 +15,19 @@ using Distributions
 #using Plots
 using LightGraphs
 
+function estimate_thetas2(gamma,N,K)
+  theta_est = zeros(Float64, N, K)
+  for i in 1:N
+    s = 0.0
+    for k in 1:K
+      s += gamma[i,k]
+    end
+    for k in 1:K
+      theta_est[i,k] = gamma[i,k]*1.0/s
+    end
+  end
+  return theta_est
+end
 ###############################################################
 ###############################################################
 println("num nodes: $(nv(network))")
@@ -556,6 +569,22 @@ for iter in 1:MAX_ITER
         # if iter >=75
         #   anneal_γ = false
         # end
+        gammas = zeros(Float64, (nv(NetPreProcess.network), Inference.K_))
+        for i in 1:nv(NetPreProcess.network)
+            gammas[i,:] = Inference.nodes_[i].γ
+        end
+        est_theta = estimate_thetas2(gammas, nv(NetPreProcess.network), K_)
+        sum_vector = zeros(Float64, K_)
+        for k in 1:K_
+          sum_vector[k] = 0.0
+          for i in 1:nv(network)
+              sum_vector[k] += est_theta[i,k]
+          end
+        end
+        for k in 1:K_
+          print("$(sum_vector[k])\t")
+        end
+        println()
         if ((!first_converge) && (abs((prev_ll-avg_lik)/prev_ll) <= (1e-4)))
             first_converge = true
             anneal_γ = false
@@ -586,4 +615,5 @@ end
 # export
 ###############################################################
 ###############################################################
+
 end
