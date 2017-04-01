@@ -11,6 +11,7 @@ module NetPreProcess
 using Utils
 using Yeppp
 using LightGraphs
+using DGP
 using FLAGS
 ###############################################################
 # N_ should be different depending on whether network
@@ -20,12 +21,11 @@ using FLAGS
 ######################  CREATE NETWORK OBJECT #############################
 ###########################################################################
 ##########################################################################
+include("flags.jl")
 network  = DiGraph()
 ###FORNOW
 if(FLAG_DGP_)
-    include("dgp.jl")
-    using DGP
-    N_=size(adj)[1]
+    N_=size(adj,1)
     network  = DiGraph(N_)
     for b in 1:N_
         for a in 1:N_
@@ -41,7 +41,8 @@ else                                     #### or read from data
     network = induced_subgraph(network, vertices)[1]
     ####
 end
-adj_matrix = LightGraphs.adjacency_matrix(network)
+#adj_matrix = LightGraphs.adjacency_matrix(network)
+adj_matrix = adj
 ##########################################################################
 ##########################################################################
 ####################  OTHER HELPFUL NETWORK OBJECTS ######################
@@ -50,8 +51,14 @@ adj_matrix = LightGraphs.adjacency_matrix(network)
 # Creating useful static network structs:(non)edges,
 # (non)sinks, (non)sources,in_degrees, out_degrees,
 ##Maybe better to work with array of pairs
-edges_ = Array{Pair{Int64, Int64},1}(ne(network))
-[edges_[index] = src(value)=>dst(value) for (index,value) in enumerate(LightGraphs.edges(network))]
+# edges_ = Array{Pair{Int64, Int64},1}(ne(network))
+edges_ = Array{Pair{Int64, Int64},1}()
+for (i,v) in enumerate(LightGraphs.edges(network))
+  push!(edges_,src(v)=>dst(v))
+end
+
+# [edges_[index] = src(value)=>dst(value) for (index,value) in enumerate(LightGraphs.edges(network))]
+
 sinks = fadj(network)
 sources = badj(network)
 non_sinks=[setdiff(deleteat!(Vector(1:nv(network)), index), value) for (index,value) in enumerate(sinks) ]
@@ -78,24 +85,24 @@ nonedges_=setdiff(all_pairs, edges_)
 #####################  EXPORTING  #############################
 ###############################################################
 ###############################################################
-x = readdlm("/home/arashyazdiha/Downloads/svinet-master/example/arash/n150-k150-mmsb-findk/communities.txt")
-arr = Dict{Int64,Vector{Int64}}()
-count = 1
-for i in 1:size(x)[1]
-  for j in 1:size(x)[2]
-    if !haskey(arr,count)
-      arr[count] = get(arr, count, Int64[])
-    end
-    if x[i,j] == ""
-      continue;
-    end
-    push!(arr[count], x[i,j])
-  end
-  count +=1
-end
-
-comms = arr
-export network, edges_, nonedges_, sinks, sources, non_sinks, non_sources, pairs_total,in_degrees,out_degrees,comms, adj_matrix
+# x = readdlm("/home/arashyazdiha/Downloads/svinet-master/example/arash/n150-k150-mmsb-findk/communities.txt")
+# arr = Dict{Int64,Vector{Int64}}()
+# count = 1
+# for i in 1:size(x)[1]
+#   for j in 1:size(x)[2]
+#     if !haskey(arr,count)
+#       arr[count] = get(arr, count, Int64[])
+#     end
+#     if x[i,j] == ""
+#       continue;
+#     end
+#     push!(arr[count], x[i,j])
+#   end
+#   count +=1
+# end
+#
+# comms = arr
+export network, edges_, nonedges_, sinks, sources, non_sinks, non_sources, pairs_total,in_degrees,out_degrees, adj_matrix
 ###############################################################
 ##############################################################
 

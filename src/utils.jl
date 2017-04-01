@@ -106,6 +106,8 @@ function row_normalize{T<:Real}(arr::AbstractArray{T})
   end
   arr
 end
+
+
 export Node, Link,NonLink, logsumexp, sort_by_argmax!, row_normalize
 
 end

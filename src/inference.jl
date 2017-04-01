@@ -15,54 +15,51 @@ using Distributions
 #using Plots
 using LightGraphs
 
-function estimate_thetas2(gamma,N,K)
-  theta_est = zeros(Float64, N, K)
+function estimate_thetas2(theta_est::Array{Float64,2},gamma::Array{Float64,2},N::Int64,K::Int64)
   for i in 1:N
-    s = 0.0
+    s = zero(eltype(gamma))
     for k in 1:K
-      s += gamma[i,k]
+      @inbounds s += gamma[i,k]
     end
     for k in 1:K
-      theta_est[i,k] = gamma[i,k]*1.0/s
+      @inbounds theta_est[i,k] = gamma[i,k]/s
     end
   end
-  return theta_est
 end
+# theta_est = zeros(eltype(gamma), (N, K))
+# @elapsed estimate_thetas2(gamma, N,K)
+# @code_warntype estimate_thetas2(rand(10,3), 10,3)
 ###############################################################
 ###############################################################
 println("num nodes: $(nv(network))")
 println("num links: $(ne(network))")
 println("num total pairs: $(nv(network)*nv(network)-nv(network))")
-link_ratio = ne(network)*1.0/(nv(network)*nv(network)-nv(network))
+link_ratio = Float64(ne(network))/Float64(nv(network)*nv(network)-nv(network))
+
 ###############################################################
 ###############################################################
 #################  PARAM INITIALIZATION   #####################
 ###############################################################
 ###############################################################
-K_= 0;ϵ = 1e-30;extra=0;eval_every = 10;anneal_ϕ = false; anneal_γ = false;
+K_= 0;ϵ = 1e-30;extra=0;
+anneal_ϕ = false; anneal_γ = false;
 η = 1.0;
+const eval_every = 10;
 
-τ = Array{Float64,2}
-if FLAGS.ANNEAL_PHI
-    anneal_ϕ = true
-end
-if FLAGS.ANNEAL_GAMMA
-    anneal_γ = true
-end
-if EXTRA_COMM
-    extra=2
-end
-if FLAGS.INIT_TRUTH
-    K_ = DGP.K_true+extra
-end
-println("num true communities: $(DGP.K_true)")
-import Gopalan
+τ = Array{Float64,2}()
+# anneal_ϕ = FLAGS.ANNEAL_PHI ? true : false
+# anneal_γ = FLAGS.ANNEAL_GAMMA? true : false
+# extra= FLAGS.EXTRA_COMM ? 2 : 0
+include("gopalan.jl")
+using Gopalan
 comms = Gopalan.communities
-K_ = length(comms)
-println("num intiialized communities: $K_")
+K_ = FLAGS.INIT_TRUTH ? DGP.K_true : length(comms)
+
+FLAGS.INIT_TRUTH ? println("num true communities: $(DGP.K_true)"):println("num intiialized communities: $K_")
 ###############################################################
 ###############################################################
 nodes_ = Array{Node,1}()
+
 for v in vertices(network)
     push!(nodes_,Node(v,zeros(Float64,K_),zeros(Float64,K_),zeros(Float64,K_),zeros(Float64,K_),NetPreProcess.sinks[v], NetPreProcess.sources[v]))
 end
@@ -74,32 +71,35 @@ val_pairs = Array{Pair{Int64, Int64},1}()          ## all pairs in validation se
 val_links = Array{Link,1}()
 val_ratio = 0.25 ###Validation ratio of links
 
-function sample_validation(val_pairs, val_links, val_ratio, nodes_, links_)
-    val_link_size = round(Int,(val_ratio * length(links_))/2.0) ## number of links in Validation set
-    for i in 1:val_link_size                           ## add nonlinks
-        while true
-            node_1 = sample(nodes_, 1)[1]
-            node_2 = sample(nodes_, 1)[1]
-            if ((node_1.id == node_2.id)|| (has_edge(network, node_1.id, node_2.id)))
-                continue;
-            end
-            push!(val_pairs, node_1.id => node_2.id)
-            break;
-        end
-    end
-    for i in 1:val_link_size                           ## add links
-        link = sample(links_, 1)[1]
-        push!(val_pairs, link.first => link.second)
-        push!(val_links, link)
-    end
+function sample_validation(val_pairs::Array{Pair{Int64, Int64},1}, val_links::Array{Link,1}, val_ratio::Float64, nodes_::Array{Node,1}, links_::Array{Link,1})
+  S=eltype(1)
+  val_link_size = S(div(val_ratio * length(links_),2.0))
+  for i in 1:val_link_size                           ## add nonlinks
+      while true
+          node_1 = sample(nodes_, 1)[1]
+          node_2 = sample(nodes_, 1)[1]
+          if ((node_1.id == node_2.id)|| (has_edge(network, node_1.id, node_2.id)))
+              continue;
+          end
+          push!(val_pairs, node_1.id => node_2.id)
+          break;
+      end
+  end
+  @inbounds for i in 1:val_link_size                           ## add links
+      link = sample(links_, 1)[1]
+      push!(val_pairs, link.first => link.second)
+      push!(val_links, link)
+  end
 end
+
 sample_validation(val_pairs, val_links, val_ratio, nodes_, links_)
+
 
 train_links_ =setdiff(links_, val_links)
 training_nonlinks_pairs = setdiff(nonedges_, val_pairs)
 nonlinks_ = Array{NonLink,1}()
 train_nonlinks_ = Array{NonLink,1}()
-s_send_temp = s_recv_temp=0.0
+s_send_temp = s_recv_temp=zero(Float64)
 node_ϕ_send = zeros(Float64, (length(nodes_), K_))
 node_ϕ_recv = zeros(Float64, (length(nodes_), K_))
 for (index,nl) in enumerate(nonedges_)
@@ -145,7 +145,7 @@ for node in nodes_
       node.γ[z] = val
     end
   end
-  s = 0.0
+  s = zero(Float64)
   for k in 1:length(comms)
     s+= node.γ[k]
   end
@@ -198,7 +198,7 @@ if FLAGS.INIT_TRUTH
   #ϵ = 0.01
 
 elseif FLAGS.INIT_RAND
-  K_ = length(comms)
+  # K_ = length(comms)
     # for node in nodes_
     #     for k in 1:(K_ - extra)
     #         node.γ[k] = 2.0*nv(network)/K_
@@ -239,7 +239,7 @@ elseif FLAGS.INIT_RAND
     for k in 1:(K_- extra)
         τ[k,1] = η###ones(Float64,(K_,2)); τ[:,1] = DGP.η_true
     end
-    ϵ = DGP.ϵ_true
+    ϵ = 1e-30#DGP.ϵ_true
 end
 println("Initialized variational parameters at ",FLAGS.INIT_TRUTH?"TRUTH":"RANDOM")
 ###############################################################
@@ -270,15 +270,15 @@ println("num minibatch links $(length(mb_links))")
 ρ_γ = 1.0
 ρ_τ = 1.0
 Elog_β = zeros(Float64, (K_,2))
-s_send = 0.0
-s_recv = 0.0
-s_nsend = 0.0
-s_nrecv = 0.0
+s_send = zero(Float64)
+s_recv = zero(Float64)
+s_nsend = zero(Float64)
+s_nrecv = zero(Float64)
 temp_send = zeros(Float64, K_)
 temp_recv = zeros(Float64, K_)
 temp_nsend = zeros(Float64, K_)
 temp_nrecv = zeros(Float64, K_)
-prev_ll = 0.0
+prev_ll = zero(Float64)
 store_ll = Array{Float64, 1}()
 first_converge = false
 τ_nxt = zeros(Float64, (K_,2))
@@ -287,69 +287,59 @@ switch_rounds1 = false
 switch_rounds2 = false
 early = true
 ##########################
-function edge_likelihood(pair, γ_a, γ_b, β, ϵ)
-    s = 0.0
-    prob = 0.0
-
+function edge_likelihood(network::DiGraph,pair::Pair{Int64,Int64}, γ_a::Array{Float64,1}, γ_b::Array{Float64,1}, β::Array{Float64,1}, ϵ::Float64,K_::Int64)
+    s = zero(eltype(ϵ))
+    S = eltype(s)
+    prob = zero(eltype(ϵ))
     for k in 1:K_
         if has_edge(network, pair.first, pair.second)
             prob += (γ_a[k]/sum(γ_a))*(γ_b[k]/sum(γ_b))*(β[k])
         else
-            prob += (γ_a[k]/sum(γ_a))*(γ_b[k]/sum(γ_b))*(1-β[k])
+            prob += (γ_a[k]/sum(γ_a))*(γ_b[k]/sum(γ_b))*(1.0-β[k])
         end
         s += (γ_a[k]/sum(γ_a))*(γ_b[k]/sum(γ_b))
     end
     if has_edge(network, pair.first, pair.second)
         prob += (1.0-s)*ϵ
     else
-        prob += (1.0-s)*(1-ϵ)
+        prob += (1.0-s)*(1.0-ϵ)
     end
-    return log(prob)
+    return log(prob)::Float64
 end
-function update_ϕ_links_send(link, Elog_β, ϵ, early, K_f)::Void
+###########################
+function update_ϕ_links_send(link::Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64)::Void
     temp_send = zeros(Float64, K_f)
-    s_send = 0.0
+    s_send = zero(eltype(ϵ))
     dependence_dom = 5.0
-    for k in 1:K_f
-        if early
-            dependence_dom = 5.0
-        else
-            dependence_dom = Elog_β[k,1]-log(ϵ)
-        end
+    @inbounds for k in 1:K_f
+        dependence_dom = early ? 5.0 : (Elog_β[k,1]-log(ϵ))
         temp_send[k] = link.ϕ_recv[k]*(dependence_dom) + nodes_[link.first].Elog_Θ[k]
-        if k > 1
-            s_send = Utils.logsumexp(s_send,temp_send[k])
-
-        else
-            s_send=temp_send[k]
-        end
+        s_send = k > 1 ? Utils.logsumexp(s_send,temp_send[k]) : temp_send[k]
     end
-    for k in 1:K_f
+    @inbounds for k in 1:K_f
         link.ϕ_send[k] = exp(temp_send[k] - s_send)
     end
 end
-function update_ϕ_links_recv(link, Elog_β, ϵ, early, K_f)::Void
-  temp_recv = zeros(Float64, K_)
-  s_recv = 0.0
+function update_ϕ_links_recv(link::Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64)::Void
+  temp_recv = zeros(Float64, K_f)
+  s_recv = zero(eltype(ϵ))
+  S = eltype(ϵ)
   dependence_dom = 5.0
-  for k in 1:K_f
-      if early
-          dependence_dom = 5.0
-      else
-          dependence_dom = Elog_β[k,1]-log(ϵ)
-      end
-      temp_recv[k] = link.ϕ_send[k]*(dependence_dom) + nodes_[link.second].Elog_Θ[k]
-      if k > 1
-          s_recv = Utils.logsumexp(s_recv,temp_recv[k])
-      else
-          s_recv=temp_recv[k]
-      end
+  @inbounds for k in 1:K_f
+      dependence_dom = early ? 5.0 : (Elog_β[k,1]-log(ϵ))
+      temp_recv[k] = (link.ϕ_send[k])*(dependence_dom) + (nodes_[link.second].Elog_Θ[k])
+      s_recv = k > 1 ? Utils.logsumexp(s_recv,(temp_recv[k])) : (temp_recv[k])
   end
-  for k in 1:K_f
-      link.ϕ_recv[k] = exp(temp_recv[k] - s_recv)
+  @inbounds for k in 1:K_f
+      link.ϕ_recv[k] = exp((temp_recv[k]) - s_recv)
   end
 end
-function update_ϕ_nonlink_send(nonlink_f, Elog_β_f, ϵ_f,K_f,train_links_f,train_nonlinks_f, nodes_f, logsumexp_f,early_f)::Void
+
+link = links_[1]
+@code_warntype update_ϕ_links_send(link, Elog_β, ϵ, early, K_,dependence_dom)
+
+
+function update_ϕ_nonlink_send(nonlink_f::NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,train_links_f,train_nonlinks_f, nodes_f, logsumexp_f,early_f)::Void
     temp_nsend = zeros(Float64, K_f)
     s_nsend = 0.0
     first = nonlink_f.first
@@ -440,11 +430,11 @@ for iter in 1:MAX_ITER
     for lid in mb_links
         link = links_[lid]
         if switch_rounds1
-            update_ϕ_links_recv(link, Elog_β, ϵ, early, K_)
-            update_ϕ_links_send(link, Elog_β, ϵ, early, K_)
+            update_ϕ_links_recv(link, Elog_β, ϵ, early, K_,dependence_dom)
+            update_ϕ_links_send(link, Elog_β, ϵ, early, K_,dependence_dom)
         else
-            update_ϕ_links_send(link, Elog_β, ϵ, early, K_)
-            update_ϕ_links_recv(link, Elog_β, ϵ, early, K_)
+            update_ϕ_links_send(link, Elog_β, ϵ, early, K_,dependence_dom)
+            update_ϕ_links_recv(link, Elog_β, ϵ, early, K_,dependence_dom)
         end
         for k in 1:K_
             τ_nxt[k,1] = τ_nxt[k,1] + link.ϕ_send[k]*link.ϕ_recv[k]
@@ -545,7 +535,7 @@ for iter in 1:MAX_ITER
         edge_lik = 0.0
         link_count = 0; nonlink_count = 0
         for pair in val_pairs
-            edge_lik = edge_likelihood(pair, nodes_[pair.first].γ, nodes_[pair.second].γ, β_est, ϵ)
+            edge_lik = edge_likelihood(network,pair, nodes_[pair.first].γ, nodes_[pair.second].γ, β_est, ϵ,K_)
             if has_edge(network, pair.first, pair.second)
                 link_count +=1
                 link_lik += edge_lik
