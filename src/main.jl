@@ -20,7 +20,7 @@ for i in 1:nv(NetPreProcess.network)
     gammas[i,:] = Inference.nodes_[i].γ
 end
 Plots.heatmap(gammas, yflip=true)
-savefig("gamma_est.png")
+# savefig("gamma_est.png")
 Plots.heatmap(DGP.Θ_true, yflip=true)
 comm_true = [Int64[] for k in 1:DGP.K_true]
 for i in 1:nv(NetPreProcess.network)
