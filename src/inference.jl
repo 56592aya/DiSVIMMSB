@@ -27,10 +27,20 @@ link_ratio = Float64(ne(network))/Float64(nv(network)*nv(network)-nv(network))
 ###############################################################
 ###############################################################
 const eval_every = 10;
-ϵ = NetPreProcess.ϵ_
-τ = NetPreProcess.τ_
-η = NetPreProcess.η_
+const ϵ = copy(NetPreProcess.ϵ_)
+τ = deepcopy(NetPreProcess.τ_)
+const η = deepcopy(NetPreProcess.η_)
+nodes_ = deepcopy(NetPreProcess.nodes__)
+links_ = deepcopy(NetPreProcess.links__)
 
+nonlinks_ = deepcopy(NetPreProcess.nonlinks__)
+train_links_ = deepcopy(NetPreProcess.train_links__)
+train_nonlinks_ = deepcopy(NetPreProcess.train_nonlinks__)
+val_pairs = deepcopy(NetPreProcess.val_pairs_)
+val_links = deepcopy(NetPreProcess.val_links_)
+val_ratio = deepcopy(NetPreProcess.val_ratio_)
+####
+####
 mb_nodes = 1:nv(network)
 mb_links = [l.id for l in train_links_]
 
@@ -90,7 +100,7 @@ function edge_likelihood(network::DiGraph,pair::Pair{Int64,Int64}, γ_a::Array{F
 end
 
 ###########################
-function update_ϕ_links_send(link::Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)::Void
+function update_ϕ_links_send(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)::Void
     temp_send = zeros(Float64, K_f)
     s_send = zero(eltype(ϵ))
     dependence_dom = 5.0
@@ -106,7 +116,7 @@ function update_ϕ_links_send(link::Link, Elog_β::Array{Float64,2}, ϵ::Float64
     end
 end
 
-function update_ϕ_links_recv(link::Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)::Void
+function update_ϕ_links_recv(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)::Void
   temp_recv = zeros(Float64, K_f)
   s_recv = zero(eltype(ϵ))
   S = eltype(ϵ)
@@ -125,7 +135,7 @@ end
 
 
 
-function update_ϕ_nonlink_send(nonlink_f::NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,train_links_f::Array{Link,1},train_nonlinks_f::Array{NonLink,1}, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
+function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,train_links_f::Array{Link,1},train_nonlinks_f::Array{NonLink,1}, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
     temp_nsend = zeros(Float64, K_f)
     s_nsend = zero(eltype(ϵ_f))
     S = typeof(s_nsend)
@@ -144,7 +154,7 @@ function update_ϕ_nonlink_send(nonlink_f::NonLink, Elog_β_f::Array{Float64,2},
     end
 end
 
-function update_ϕ_nonlink_recv(nonlink_f::NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,train_links_f::Array{Link,1},train_nonlinks_f::Array{NonLink,1}, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
+function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,train_links_f::Array{Link,1},train_nonlinks_f::Array{NonLink,1}, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
   temp_nrecv = zeros(Float64, K_f)
   s_nrecv = zero(eltype(ϵ_f))
   S = typeof(ϵ_f)
