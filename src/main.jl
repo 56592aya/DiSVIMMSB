@@ -2,10 +2,9 @@ module Main
 include("utils.jl")
 include("flags.jl")
 include("dgp.jl")
+include("gopalan.jl")
 include("net_preprocess.jl")
 println(diag(DGP.β_true))
-include("gopalan.jl")
-Gopalan.communities
 
 using Plots
 using LightGraphs
@@ -145,13 +144,23 @@ open("./file3", "w") do f
 end
 
 
-run(`NMI/onmi file3 file4`)
+run(`NMI/onmi file1 file2`)
 #####
-
+using Lint
+lintfile("inference.jl")
 Plots.heatmap(DGP.Θ_true, yflip=true)
 Plots.heatmap(DGP.adj_matrix, yflip=true)
 Plots.heatmap(diagm([Inference.τ[k,1]/sum(Inference.τ[k,:]) for k in 1:Inference.K_]), yflip=true)
 Plots.heatmap(DGP.β_true, yflip=true)
+
+
+
+``
+
+
+
+
+
 
 Plots.plot(1:length(Inference.store_ll), Inference.store_ll)
 

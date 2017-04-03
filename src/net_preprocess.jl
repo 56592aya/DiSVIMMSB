@@ -79,30 +79,211 @@ for a in 1:nv(network)
     end
 end
 nonedges_=setdiff(all_pairs, edges_)
-#savegraph("Prints/graph.gml", network,:gml)
+##############################################
+using Gopalan
+comms = Gopalan.communities
+K_ = FLAGS.INIT_TRUTH ? DGP.K_true : length(comms)
+
+FLAGS.INIT_TRUTH ? println("num true communities: $(DGP.K_true)"):println("num intiialized communities: $K_")
 ###############################################################
 ###############################################################
-#####################  EXPORTING  #############################
+nodes_ = Array{Node,1}()
+
+for v in vertices(network)
+    push!(nodes_,Node(v,zeros(Float64,K_),zeros(Float64,K_),zeros(Float64,K_),zeros(Float64,K_),sinks[v], sources[v]))
+end
+links_ = Array{Link,1}()
+for (index,  value) in enumerate(edges_)
+    push!(links_, Link(index, value.first, value.second, zeros(Float64, K_), zeros(Float64, K_)))
+end
+val_pairs = Array{Pair{Int64, Int64},1}()          ## all pairs in validation set
+val_links = Array{Link,1}()
+val_ratio = 0.25 ###Validation ratio of links
+using Distributions
+function sample_validation(val_pairs::Array{Pair{Int64, Int64},1}, val_links::Array{Link,1}, val_ratio::Float64, nodes_::Array{Node,1}, links_::Array{Link,1})
+  S=eltype(1)
+  val_link_size = S(div(val_ratio * length(links_),2.0))
+  for i in 1:val_link_size                           ## add nonlinks
+      while true
+          node_1 = sample(nodes_, 1)[1]
+          node_2 = sample(nodes_, 1)[1]
+          if ((node_1.id == node_2.id)|| (has_edge(network, node_1.id, node_2.id)))
+              continue;
+          end
+          push!(val_pairs, node_1.id => node_2.id)
+          break;
+      end
+  end
+  for i in 1:val_link_size                           ## add links
+      @inbounds begin
+        link = sample(links_, 1)[1]
+        push!(val_pairs, link.first => link.second)
+        push!(val_links, link)
+      end
+  end
+end
+
+sample_validation(val_pairs, val_links, val_ratio, nodes_, links_)
+
+
+train_links_ =setdiff(links_, val_links)
+
+training_nonlinks_pairs = setdiff(nonedges_, val_pairs)
+nonlinks_ = Array{NonLink,1}()
+train_nonlinks_ = Array{NonLink,1}()
+s_send_temp = s_recv_temp=zero(Float64)
+node_ϕ_send = zeros(Float64, (length(nodes_), K_))
+node_ϕ_recv = zeros(Float64, (length(nodes_), K_))
+for (index,nl) in enumerate(nonedges_)
+    push!(nonlinks_, NonLink(index, nl.first, nl.second, view(node_ϕ_send,nl.first,1:K_), view(node_ϕ_recv,nl.second,1:K_)))
+    if nl in training_nonlinks_pairs
+        push!(train_nonlinks_, NonLink(index, nl.first, nl.second, view(node_ϕ_send,nl.first,1:K_), view(node_ϕ_recv,nl.second,1:K_)))
+    end
+end
+###############################################################
+Belong = Dict{Int64, Vector{Int64}}()
+for node in nodes_
+  if !haskey(Belong, node.id)
+    Belong[node.id] = get(Belong, node.id, Int64[])
+  end
+  for k in 1:length(comms)
+    if node.id in comms[k]
+      push!(Belong[node.id],k)
+    end
+  end
+  if length(Belong[node.id]) == 0
+    push!(Belong[node.id], sample(1:length(comms)))
+    node.γ[Belong[node.id]] = .9
+  elseif length(Belong[node.id]) == 1
+    node.γ[Belong[node.id]] = .9
+  else
+    val = .9/length(Belong[node.id])
+    for z in Belong[node.id]
+      node.γ[z] = val
+    end
+  end
+  s = zero(Float64)
+  for k in 1:length(comms)
+    s+= node.γ[k]
+  end
+  for k in 1:length(comms)
+    node.γ[k] = node.γ[k]/s
+  end
+end
+
+η_ = 1.0
+τ_ = ones(Float64,(K_,2));
+ϵ_ = 1e-30#DGP.ϵ_true
+
+if FLAGS.INIT_TRUTH
+  for link in links_
+    for k in 1:(K_)
+      link.ϕ_send[k] = DGP.Θ_true[link.first,k]
+      link.ϕ_recv[k] = DGP.Θ_true[link.second,k]
+    end
+    s_send_temp = sum(link.ϕ_send)
+    s_recv_temp = sum(link.ϕ_recv)
+    for k in 1:(K_)
+        link.ϕ_send[k] /=s_send_temp
+        link.ϕ_recv[k] /=s_recv_temp
+    end
+  end
+  for node in nodes_
+      for k in 1:(K_)
+          node.γ[k] = (2.0*nv(network)/K_)#DGP.α_true[k] + (sum((l.ϕ_send[k]  for l in links_ if l.first == node.id))+sum((l.ϕ_recv[k]  for l in links_ if l.second == node.id)))*(2*nv(network)-2)/(in_degrees[node.id]+out_degrees[node.id])
+      end
+  end
+  for node in nodes_
+      for k in 1:(K_)
+          node_ϕ_send[node.id, k] = DGP.Θ_true[node.id,k]
+          node_ϕ_recv[node.id, k] = DGP.Θ_true[node.id,k]
+      end
+
+      s_send_temp = sum(node_ϕ_send)
+      s_recv_temp = sum(node_ϕ_recv)
+      for k in 1:(K_)
+          node_ϕ_send[node.id, k] /=s_send_temp
+          node_ϕ_recv[node.id, k] /=s_recv_temp
+      end
+  end
+  τ_ = ones(Float64,(K_,2));
+  for k in 1:(K_)
+      #τ_[k,1] = DGP.β_true[k,k]/(1.0-DGP.β_true[k,k])
+      τ_[k,1] = 1.0
+  end
+  #η_ = DGP.η__true
+  η_ = 1.0
+  ϵ_ = DGP.ϵ_true
+  #ϵ = 0.01
+
+elseif FLAGS.INIT_RAND
+  # K_ = length(comms)
+    # for node in nodes_
+    #     for k in 1:(K_ - extra)
+    #         node.γ[k] = 2.0*nv(network)/K_
+    #     end
+    # end
+
+    for link in links_
+
+        for k in 1:(K_)
+            nid = link.first
+            link.ϕ_send[k] = nodes_[nid].γ[k]
+            nid = link.second
+            link.ϕ_recv[k] = nodes_[nid].γ[k]
+        end
+
+        s_send_temp = sum(link.ϕ_send)
+        s_recv_temp = sum(link.ϕ_recv)
+        for k in 1:(K_)
+            link.ϕ_send[k] /=s_send_temp
+            link.ϕ_recv[k] /=s_recv_temp
+        end
+    end
+    for node in nodes_
+        for k in 1:(K_)
+            node_ϕ_send[node.id, k] = node.γ[k]
+            node_ϕ_recv[node.id, k] = node.γ[k]
+        end
+
+        s_send_temp = sum(node_ϕ_send)
+        s_recv_temp = sum(node_ϕ_recv)
+        for k in 1:(K_)
+            node_ϕ_send[node.id, k] /=s_send_temp
+            node_ϕ_recv[node.id, k] /=s_recv_temp
+        end
+    end
+    η_ = 1.0
+    τ_ = ones(Float64,(K_,2));
+    for k in 1:(K_)
+        τ_[k,1] = η_###ones(Float64,(K_,2)); τ_[:,1] = DGP.η__true
+    end
+    ϵ_ = 1e-30#DGP.ϵ_true
+end
+println("Initialized variational parameters at ",FLAGS.INIT_TRUTH?"TRUTH":"RANDOM")
 ###############################################################
 ###############################################################
-# x = readdlm("/home/arashyazdiha/Downloads/svinet-master/example/arash/n150-k150-mmsb-findk/communities.txt")
-# arr = Dict{Int64,Vector{Int64}}()
-# count = 1
-# for i in 1:size(x)[1]
-#   for j in 1:size(x)[2]
-#     if !haskey(arr,count)
-#       arr[count] = get(arr, count, Int64[])
-#     end
-#     if x[i,j] == ""
-#       continue;
-#     end
-#     push!(arr[count], x[i,j])
-#   end
-#   count +=1
-# end
-#
-# comms = arr
+###################### CONSTRUCTING MINIBATCH ################
+###############################################################
+###############################################################
+##For now the whole network(Biggest connected component)
+
+###############################################################
+###############################################################
+###################### CONSTRUCTING VALIDATION ################
+###############################################################
+###############################################################
+
+println("num validation pairs $(length(val_pairs))")
+println("num validation links $(length(val_links))")
+println("num validation nonlinks $(length(val_pairs)-length(val_links))")
+println("num training links $(length(train_links_))")
+println("num training nonlinks $(length(train_nonlinks_))")
+# println("num minibatch nodes $(length(mb_nodes))")
+# println("num minibatch links $(length(mb_links))")
+#############################
 export network, edges_, nonedges_, sinks, sources, non_sinks, non_sources, pairs_total,in_degrees,out_degrees, adj_matrix
+export ϵ_,K_,τ_,η_,links_,nonlinks_,nodes_,train_links_,train_nonlinks_,val_pairs, val_links,val_ratio
 ###############################################################
 ##############################################################
 

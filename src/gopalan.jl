@@ -2,7 +2,8 @@ __precompile__()
 module Gopalan
 
 using Utils
-using NetPreProcess
+
+# using NetPreProcess
 using LightGraphs
 using Distributions
 using DataStructures
@@ -17,8 +18,9 @@ type KeyVal
 end
 import Base.zeros
 Base.zero(::Type{KeyVal}) = KeyVal(0,0.0)
-
-N_=nv(network)
+###this needs to be n from data
+using DGP
+N_=size(DGP.adj,1)
 topK = 5
 alpha = 1.0/N_
 gamma = [KeyVal(0,0.0) for i=1:N_, j=1:topK]
@@ -27,9 +29,15 @@ maxgamma = zeros(Int64,N_)
 communities = Dict{Int64, Vector{Int64}}()
 ulinks = Vector{Pair{Int64, Int64}}()
 #undirected
-for (i,v) in enumerate(edges(network))
-  if src(v) < dst(v)
-    push!(ulinks,src(v)=>dst(v))
+for a in 1:N_
+  for b in 1:N_
+    if a < b
+      if DGP.adj[a,b] == 0
+        continue;
+      else
+        push!(ulinks,a=>b)
+      end
+    end
   end
 end
 
