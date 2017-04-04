@@ -47,12 +47,14 @@ mb_links = [l.id for l in train_links_]
 mb_nonlinks = Array{Int64,1}()
 mb_nonsources_length = zeros(Int64, length(mb_nodes))
 mb_nonsinks_length = zeros(Int64, length(mb_nodes))
-train_nonsources_length = zeros(Int64, length(mb_nodes))
-train_nonsinks_length = zeros(Int64, length(mb_nodes))
-for nid in mb_nodes
+train_nonsources_length = zeros(Int64, nv(network))
+train_nonsinks_length = zeros(Int64, nv(network))
+##don't take inside loop BEGIN
+for nid in 1:nv(network)
     train_nonsinks_length[nid] = sum(1 for nl in train_nonlinks_ if nl.first == nid)
     train_nonsources_length[nid] = sum(1 for nl in train_nonlinks_ if nl.second == nid)
 end
+###dont take inside loop END
 train_nonlinks_ids = [l.id for l in train_nonlinks_]
 ###############################################################
 ###############################################################
@@ -135,16 +137,17 @@ end
 
 
 
-function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,train_links_f::Array{Link,1},train_nonlinks_f::Array{NonLink,1}, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
+function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,len_train_links_::Int64,len_train_nonlinks_::Int64, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
     temp_nsend = zeros(Float64, K_f)
     s_nsend = zero(eltype(ϵ_f))
     S = typeof(s_nsend)
     first = nonlink_f.first
     second = nonlink_f.second
-    dep = S(length(train_links_f))/S(length(train_links_f)+length(train_nonlinks_f))
+    dep = S(len_train_links_/(len_train_links_+len_train_nonlinks_))
     for k in 1:K_f
+
         @inbounds begin
-          dep = early_f ? S(length(train_links_f)*1.0)/S(length(train_links_f)+length(train_nonlinks_f)) : Elog_β_f[k,2]-log1p(1.0-ϵ_f)
+          dep = early_f ? S(len_train_links_/(len_train_links_+len_train_nonlinks_)) : Elog_β_f[k,2]-log1p(1.0-ϵ_f)
           temp_nsend[k] = nonlink_f.ϕ_nrecv[k]*(dep) + nodes_f[first].Elog_Θ[k]
           s_nsend = k > 1 ? logsumexp_f(s_nsend,temp_nsend[k]) : temp_nsend[k]
         end
@@ -154,15 +157,16 @@ function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
     end
 end
 
-function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,train_links_f::Array{Link,1},train_nonlinks_f::Array{NonLink,1}, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
+function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,len_train_links_::Int64,len_train_nonlinks_::Int64, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
   temp_nrecv = zeros(Float64, K_f)
   s_nrecv = zero(eltype(ϵ_f))
   S = typeof(ϵ_f)
   first = nonlink_f.first
   second = nonlink_f.second
+  dep = S(len_train_links_/(len_train_links_+len_train_nonlinks_))
   for k in 1:K_f
       @inbounds begin
-        dep = early_f ? length(train_links_f)*1.0/S(length(train_links_f)+length(train_nonlinks_f)) : Elog_β_f[k,2]-log1p(1.0-ϵ_f)
+        dep = early_f ? S(len_train_links_/(len_train_links_+len_train_nonlinks_)) : Elog_β_f[k,2]-log1p(1.0-ϵ_f)
         temp_nrecv[k] = nonlink_f.ϕ_nsend[k]*(dep) + nodes_f[second].Elog_Θ[k]
         s_nrecv = k > 1 ? logsumexp_f(s_nrecv,temp_nrecv[k]) : temp_nrecv[k]
       end
@@ -172,26 +176,45 @@ function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
   end
 end
 
+len_train_links = length(train_links_)
+len_train_nonlinks = length(train_nonlinks_)
+function createMinibatch!(mb_links_f::Array{Int64,1}, mb_nonlinks_f::Array{Int64,1}, mb_nodes_f::Array{Int64,1},train_links_f::Array{Link,1}, train_nonlinks_f::Array{NonLink,1}, mb_num_f::Int64)
+    Llink = sample(train_links_f, mb_num_f, replace=false)
+    NLlink = sample(train_nonlinks_f, mb_num_f, replace=false)
+    temp = Int64[]
+    for l in Llink
+        push!(mb_links_f,l.id)
+        push!(temp,l.first)
+        push!(temp,l.second)
+    end
+    for nl in NLlink
+        push!(mb_nonlinks_f,nl.id)
+        push!(temp,nl.first)
+        push!(temp,nl.second)
+    end
+    temp = unique(temp)
+    for i in temp
+        push!(mb_nodes_f,i)
+    end
+end
 
+# @code_warntype createMinibatch!(mb_links, mb_nonlinks, mb_nodes, train_links_, train_nonlinks_, 200)
 ####################E-step
+mb_links = Int64[]
+mb_nonlinks = Int64[]
+mb_nodes = Int64[]
 @inbounds for iter in 1:MAX_ITER
     tic();
     count = 1
     S = Float64
-    # if anneal_γ
-    #     ρ_γ = .5
-    #     ρ_τ = .5
-    #     count += 1
-    # else
-        ρ_γ = 0.5*(102.0/(S(iter)-S(count)+102.0))^(0.5)
-        ρ_τ = 0.5*(102.0/(S(iter)-S(count)+102.0))^(0.9)
-    # end
-    ###JUST TEST
 
-    mb_nodes = shuffle(mb_nodes)
-    mb_nonlinks = Array{Int64,1}()
-    mb_nonlinks = sample(train_nonlinks_ids, length(mb_links), replace=false)
-    mb_links = shuffle(mb_links)
+    ρ_γ = 0.5*(102.0/(S(iter)-S(count)+102.0))^(0.5)
+    ρ_τ = 0.5*(102.0/(S(iter)-S(count)+102.0))^(0.9)
+
+    mb_links = Int64[]
+    mb_nonlinks = Int64[]
+    mb_nodes = Int64[]
+    createMinibatch!(mb_links, mb_nonlinks, mb_nodes, train_links_, train_nonlinks_, 200)
     println()
     println("num minibatch links $(length(mb_links))")
     println("num minibatch nonlinks $(length(mb_nonlinks))")
@@ -232,11 +255,11 @@ end
     for nlid in mb_nonlinks
         nonlink = nonlinks_[nlid]
         if switch_rounds1
-            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,train_links_,train_nonlinks_, nodes_, Utils.logsumexp,early)
-            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ,K_,train_links_,train_nonlinks_, nodes_, Utils.logsumexp,early)
+            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,len_train_links,len_train_nonlinks, nodes_, Utils.logsumexp,early)
+            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ,K_,len_train_links,len_train_nonlinks, nodes_, Utils.logsumexp,early)
         else
-            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ,K_,train_links_,train_nonlinks_, nodes_, Utils.logsumexp,early)
-            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,train_links_,train_nonlinks_, nodes_, Utils.logsumexp,early)
+            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ,K_,len_train_links,len_train_nonlinks, nodes_, Utils.logsumexp,early)
+            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,len_train_links,len_train_nonlinks, nodes_, Utils.logsumexp,early)
         end
 
         for k in 1:K_
