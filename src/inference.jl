@@ -301,9 +301,9 @@ end
     end
 
     for k in 1:K_
-        τ[k,1] = τ[k,1] *(1-ρ_τ) + (τ_nxt[k,1] + η)*ρ_τ
+        τ[k,1] = τ[k,1] *(1-ρ_τ) + ((length(train_links_)/length(mb_links))*τ_nxt[k,1] + η)*ρ_τ
 
-        τ[k,2] = τ[k,2] *(1-ρ_τ) + (length(train_nonlinks_)/length(mb_nonlinks)*τ_nxt[k,2] +1.0)*ρ_τ
+        τ[k,2] = τ[k,2] *(1-ρ_τ) + ((length(train_nonlinks_)/length(mb_nonlinks))*τ_nxt[k,2] +1.0)*ρ_τ
     end
 
     println("")
