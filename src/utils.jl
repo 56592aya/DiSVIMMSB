@@ -17,9 +17,7 @@ type Node
     γ::Array{Float64,1}         ## mutable by itslef
     γ_nxt::Array{Float64,1}     ## mutable by itslef
     Elog_Θ::Array{Float64,1}    ## mutable by itslef
-    ϕ_nolink::Array{Float64,1}  ## mutable by itslef
-    sinks::Array{Int64, 1}      ## mutable by itslef
-    sources::Array{Int64, 1}    ## mutable by itslef
+    # ϕ_nolink::Array{Float64,1}  ## mutable by itslef
 end
 #############################################################
 # define a `Link` type

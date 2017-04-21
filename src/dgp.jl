@@ -19,7 +19,7 @@ using Yeppp
 
 const N=150;
 const K_true=4;
-const α_el=1.0/K_true/10.0;
+const α_el=1.0/K_true/5.0;
 const ϵ_true=1e-30;
 const η_true=10;
 const seed = 1234
@@ -97,6 +97,19 @@ generate_Θ_true!(Θ_true,α_true, N, K_true, seed)
 Utils.sort_by_argmax!(Θ_true)
 adj = spzeros(Int64,N,N)
 generate_network_true!(adj,N, K_true, Θ_true, β_true,seed)
+
+
+
+
+open("./network.txt", "w") do f
+    i1 = findnz(adj)[1]
+    i2 = findnz(adj)[2]
+    for i in 1:length(i1)
+        write(f,"$(i1[i]),$(i2[i])\n")
+    end
+end
+
+
 ###############################################################
 ###############################################################
 #####################  EXPORTING  #############################
@@ -105,4 +118,14 @@ generate_network_true!(adj,N, K_true, Θ_true, β_true,seed)
 export N, K_true, ϵ_true, η_true,β_true, α_true, Θ_true, adj, α_el
 ###############################################################
 ###############################################################
+
+
+
+
+
+
+
+
+
+
 end

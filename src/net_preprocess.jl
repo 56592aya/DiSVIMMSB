@@ -13,101 +13,47 @@ using Yeppp
 using LightGraphs
 using DGP
 using FLAGS
-###############################################################
-# N_ should be different depending on whether network
-# is read or is from DGP
-##########################################################################
-##########################################################################
-######################  CREATE NETWORK OBJECT #############################
-###########################################################################
-##########################################################################
+
+data=readdlm("./network.txt",',',Int64)
+
 include("flags.jl")
-network  = DiGraph()
-###FORNOW
-if(FLAG_DGP_)
-    N_=size(adj,1)
-    network  = DiGraph(N_)
-    for b in 1:N_
-        for a in 1:N_
-            if adj[a,b] == 1
-                add_edge!(network, a, b)
-            end
-        end
-    end
-else                                     #### or read from data
-    ####
-    network=loadgraph("polblogs.gml", :gml)
-    vertices = connected_components(network)[1]
-    network = induced_subgraph(network, vertices)[1]
-    ####
+N_ = length(unique(vcat(data[:,1],data[:,2])))
+println("num total nodes: $N_")
+network  = LightGraphs.DiGraph(N_)
+for i in 1:size(data,1)
+    a = data[i,1]
+    b = data[i,2]
+    LightGraphs.add_edge!(network, a, b)
 end
-#adj_matrix = LightGraphs.adjacency_matrix(network)
 adj_matrix = adj
-##########################################################################
-##########################################################################
-####################  OTHER HELPFUL NETWORK OBJECTS ######################
-##########################################################################
-##########################################################################
-# Creating useful static network structs:(non)edges,
-# (non)sinks, (non)sources,in_degrees, out_degrees,
-##Maybe better to work with array of pairs
-# edges_ = Array{Pair{Int64, Int64},1}(ne(network))
-edges_ = Array{Pair{Int64, Int64},1}()
-for (i,v) in enumerate(LightGraphs.edges(network))
-  push!(edges_,src(v)=>dst(v))
-end
-
-# [edges_[index] = src(value)=>dst(value) for (index,value) in enumerate(LightGraphs.edges(network))]
-
-sinks = fadj(network)
-sources = badj(network)
-non_sinks=[setdiff(deleteat!(Vector(1:nv(network)), index), value) for (index,value) in enumerate(sinks) ]
-non_sources=[setdiff(deleteat!(Vector(1:nv(network)), index), value) for (index,value) in enumerate(sources) ]
-out_degrees = [length(sinks[x]) for x in 1:nv(network)]
-#map(x->outdegree(network,x), vertices(network))
-in_degrees = [length(sources[x]) for x in 1:nv(network)]
-#map(x->indegree(network,x), vertices(network))
-pairs_total = nv(network)*nv(network)-nv(network)
-all_pairs = Array{Pair{Int64, Int64},1}(pairs_total)
-count_ = 1
-for a in 1:nv(network)
-    for b in 1:nv(network)
-        if b != a
-            all_pairs[count_] = a=>b
-            count_ +=1
-        end
-    end
-end
-nonedges_=setdiff(all_pairs, edges_)
-##############################################
 using Gopalan
 comms = Gopalan.communities
 K_ = FLAGS.INIT_TRUTH ? DGP.K_true : length(comms)
-
 FLAGS.INIT_TRUTH ? println("num true communities: $(DGP.K_true)"):println("num intiialized communities: $K_")
 ###############################################################
 ###############################################################
-nodes__ = Array{Node,1}()
+nodes__ = Array{Utils.Node,1}()
 
 for v in vertices(network)
-    push!(nodes__,Node(v,zeros(Float64,K_),zeros(Float64,K_),zeros(Float64,K_),zeros(Float64,K_),sinks[v], sources[v]))
+    push!(nodes__,Utils.Node(v,zeros(Float64,K_),zeros(Float64,K_),zeros(Float64,K_),zeros(Float64,K_),sinks[v], sources[v]))
 end
-links__ = Array{Link,1}()
+links__ = Array{Utils.Link,1}()
 for (ind,  val) in enumerate(edges_)
-    push!(links__, Link(ind, val.first, val.second, zeros(Float64, K_), zeros(Float64, K_)))
+    push!(links__, Utils.Link(ind, val.first, val.second, zeros(Float64, K_), zeros(Float64, K_)))
 end
 val_pairs_ = Array{Pair{Int64, Int64},1}()          ## all pairs in validation set
-val_links_ = Array{Link,1}()
+val_links_ = Array{Utils.Link,1}()
 val_ratio_ = 0.25 ###Validation ratio of links
 using Distributions
-function sample_validation(val_pairs_::Array{Pair{Int64, Int64},1}, val_links_::Array{Link,1}, val_ratio_::Float64, nodes__::Array{Node,1}, links__::Array{Link,1})
+
+function sample_validation(val_pairs_::Array{Pair{Int64, Int64},1}, val_links_::Array{Utils.Link,1}, val_ratio_::Float64, nodes__::Array{Utils.Node,1}, links__::Array{Utils.Link,1})
   S=eltype(1)
   val_link_size = S(div(val_ratio_ * length(links__),2.0))
   for i in 1:val_link_size                           ## add nonlinks
       while true
           node_1 = sample(nodes__, 1)[1]
           node_2 = sample(nodes__, 1)[1]
-          if ((node_1.id == node_2.id)|| (has_edge(network, node_1.id, node_2.id)))
+          if ((node_1.id == node_2.id)|| (LightGraphs.has_edge(network, node_1.id, node_2.id)))
               continue;
           end
           push!(val_pairs_, node_1.id => node_2.id)
@@ -124,22 +70,29 @@ function sample_validation(val_pairs_::Array{Pair{Int64, Int64},1}, val_links_::
 end
 
 sample_validation(val_pairs_, val_links_, val_ratio_, nodes__, links__)
-
-
+val_link_ids_ = [l.id for l in val_links_]
+link_ids_ = [l.id for l in links__]
 train_links__ =setdiff(links__, val_links_)
-
+train_link_ids_ = setdiff(link_ids_, val_link_ids_)
+###This part is time consuming
 training_nonlinks_pairs = setdiff(nonedges_, val_pairs_)
 nonlinks__ = Array{NonLink,1}()
 train_nonlinks__ = Array{NonLink,1}()
 s_send_temp = s_recv_temp=zero(Float64)
 node_ϕ_send = zeros(Float64, (length(nodes__), K_))
 node_ϕ_recv = zeros(Float64, (length(nodes__), K_))
+
+
+
 for (ind,nl) in enumerate(nonedges_)
     push!(nonlinks__, NonLink(ind, nl.first, nl.second, view(node_ϕ_send,nl.first,1:K_), view(node_ϕ_recv,nl.second,1:K_)))
     if nl in training_nonlinks_pairs
         push!(train_nonlinks__, NonLink(ind, nl.first, nl.second, view(node_ϕ_send,nl.first,1:K_), view(node_ϕ_recv,nl.second,1:K_)))
     end
 end
+
+nonlink_ids_ = [nl.id for nl in nonlinks__]
+train_nonlink_ids_ = [nl.id for nl in train_nonlinks__]
 ###############################################################
 Belong = Dict{Int64, Vector{Int64}}()
 for node in nodes__
@@ -282,8 +235,9 @@ println("num training nonlinks $(length(train_nonlinks__))")
 # println("num minibatch nodes $(length(mb_nodes))")
 # println("num minibatch links $(length(mb_links))")
 #############################
-export network, edges_, nonedges_, sinks, sources, non_sinks, non_sources, pairs_total,in_degrees,out_degrees, adj_matrix
-export ϵ_,K_,τ_,η_,links__,nonlinks__,nodes__,train_links__,train_nonlinks__,val_pairs_, val_links_,val_ratio_
+
+export network, edges_, nonedges_, sinks, sources, non_sinks, non_sources, pairs_total,in_degrees,out_degrees, adj_matrix,nonlink_ids_,train_nonlink_ids_
+export ϵ_,K_,τ_,η_,links__,nonlinks__,nodes__,train_links__,train_nonlinks__,val_pairs_, val_links_,val_ratio_,train_link_ids_,val_link_ids_
 ###############################################################
 ##############################################################
 
