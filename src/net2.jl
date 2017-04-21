@@ -128,6 +128,8 @@ for node in nodes__
 end
 ########################################
 ########################################
+# initialize the phis according to the normalized intiialization of gamma
+## Also unnecessary since we use the gammas
 s_send_temp=zero(Float64)
 s_recv_temp=zero(Float64)
 node_ϕ_send = zeros(Float64, (length(nodes__), K_))
@@ -138,31 +140,20 @@ for node in nodes__
         node_ϕ_recv[node.id, k] = node.γ[k]
     end
 
-    s_send_temp = sum(node_ϕ_send)
-    s_recv_temp = sum(node_ϕ_recv)
+    s_send_temp = sum(node_ϕ_send[node.id,:])
+    s_recv_temp = sum(node_ϕ_recv[node.id,:])
     for k in 1:(K_)
         node_ϕ_send[node.id, k] /=s_send_temp
         node_ϕ_recv[node.id, k] /=s_recv_temp
     end
 end
-
+#############################################
+#############################################
+### Initializing other parameters
 η_ = 1.0
 τ_ = ones(Float64,(K_,2));
 ϵ_ = 1e-30#DGP.ϵ_true
 η_ = 1.0
-###############################################################
-###############################################################
-###################### CONSTRUCTING MINIBATCH ################
-###############################################################
-###############################################################
-##For now the whole network(Biggest connected component)
-
-###############################################################
-###############################################################
-###################### CONSTRUCTING VALIDATION ################
-###############################################################
-###############################################################
-
 
 println("num validation links $(length(val_link_pairs_))")
 println("num training links $(length(train_link_pairs_))")
