@@ -74,6 +74,13 @@ incorrect_train_nonlink_pairs_ = [Pair(l.first,l.second) for (i,l) in enumerate(
 ##The count is important but not necessarily the pairs themselves.
 train_nonlink_pairs_ = setdiff(incorrect_train_nonlink_pairs_,val_nonlink_pairs_)
 len_train_nonlink_pairs_=length(train_nonlink_pairs_)
+len_train_nonsinks_ = zeros(Float64, nv(network))
+len_train_nonsources_ = zeros(Float64, nv(network))
+for np in train_nonlink_pairs_
+    len_train_nonsinks_[np.first] +=1
+    len_train_nonsources_[np.second] +=1
+end
+
 ###############################################################
 ## Assigning values based on the initialization algorithm
 using Gopalan
@@ -160,7 +167,7 @@ println("num training links $(length(train_link_pairs_))")
 #############################
 
 export network,train_link_pairs_,val_link_pairs_,train_edge_list_,val_edge_list_,adj_matrix,val_nonlink_pairs_,train_net_,val_net_,len_val_pairs_
-export ϵ_,K_,τ_,η_,nodes__,node_ϕ_send,node_ϕ_recv,len_train_nonlink_pairs_,train_nonlink_pairs_,val_pairs_
+export ϵ_,K_,τ_,η_,nodes__,node_ϕ_send,node_ϕ_recv,len_train_nonlink_pairs_,train_nonlink_pairs_,val_pairs_,len_train_nonsinks_,len_train_nonsources_
 ###############################################################
 ##############################################################
 

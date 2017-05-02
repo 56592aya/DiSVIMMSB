@@ -7,7 +7,6 @@ module Inference
 ###############################################################
 using Utils
 using DGP
-# using NetPreProcess
 using Net2
 using LightGraphs
 using FLAGS
@@ -21,7 +20,6 @@ println("num nodes: $(nv(network))")
 println("num links: $(ne(network))")
 println("num total pairs: $(nv(network)*nv(network)-nv(network))")
 link_ratio = Float64(ne(network))/Float64(nv(network)*nv(network)-nv(network))
-
 ###############################################################
 ###############################################################
 #################  PARAM INITIALIZATION   #####################
@@ -32,29 +30,45 @@ const ϵ = copy(Net2.ϵ_)
 τ = deepcopy(Net2.τ_)
 const η = deepcopy(Net2.η_)
 nodes_ = deepcopy(Net2.nodes__)
-α = repeat([link_ratio/K_], outer=[K_])
-
+α = DGP.α_true#repeat([1.0/K_/5.0], outer=[K_]);#repeat([link_ratio/K_], outer=[K_]);
 train_link_pairs = deepcopy(Net2.train_link_pairs_)
+train_nonlink_pairs= deepcopy(Net2.train_nonlink_pairs_)
+len_train_nonlink_pairs = deepcopy(Net2.len_train_nonlink_pairs_)
+len_train_nonsinks = deepcopy(len_train_nonsinks_)
+len_train_nonsources = deepcopy(len_train_nonsources_)
 val_link_pairs = deepcopy(Net2.val_link_pairs_)
 val_nonlink_pairs = deepcopy(Net2.val_nonlink_pairs_)
+val_pairs = deepcopy(val_pairs_)
 val_ratio = deepcopy(Net2.val_ratio_)
 ####
-####
-mb_num=nv(network)#round(Int64, nv(network)/1.5)
-#####
-ρ_γ = 1.0
+## Iteration variables
+ρ_γ = ones(Float64, nv(network))
 ρ_τ = 1.0
-Elog_β = zeros(Float64, (K_,2))
-####
 prev_ll = zero(Float64)
 store_ll = Array{Float64, 1}()
 first_converge = false
-τ_nxt = zeros(Float64, (K_,2))
-####################
 switch_rounds1 = false
 switch_rounds2 = false
-early = true
+early = false
+#mb_num=nv(network) < 200 ? nv(network) : 200#round(Int64, nv(network)/1.5)##For now let's do them all
+mb_num=1
+Elog_β = zeros(Float64, (K_,2))
+τ_nxt = zeros(Float64, (K_,2))
+# sampled=false
+mb_nodes = Int64[]
+mb_links = Array{Pair{Int64,Int64},1}()
+mb_nonlinks = Array{Pair{Int64,Int64},1}()
+sampled_nonlinks=Array{NonLink,1}()
+sampled_links=Array{Link,1}()
+count = 1 ## used in the learning rate computation
+gamma_norm = Net2.node_ϕ_send ##OR Net2.node_ϕ_rec
+
+####
+#####
+
+####################
 ##########################
+##Computes the likelihood of a hypothetial link, whether it is actually a link or a nonlink
 function edge_likelihood(network::DiGraph,pair::Pair{Int64,Int64}, γ_a::Array{Float64,1}, γ_b::Array{Float64,1}, β::Array{Float64,1}, ϵ_f::Float64,K_f::Int64)
     s = zero(eltype(ϵ_f))
     S = eltype(s)
@@ -79,14 +93,16 @@ end
 function update_ϕ_links_send(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)::Void
     temp_send = zeros(Float64, K_f)
     s_send = zero(eltype(ϵ))
-    dependence_dom = 5.0
+
+    dependence_dom = 10.0 ## to be used for the early iterations
     for k in 1:K_f
         @inbounds begin
-          dependence_dom = early ? 5.0 : (Elog_β[k,1]-log(ϵ))
+          dependence_dom = early ? 10.0 : (Elog_β[k,1]-log(ϵ))
           temp_send[k] = link.ϕ_recv[k]*(dependence_dom) + nodes_[link.first].Elog_Θ[k]
           s_send = k > 1 ? logsumexp_f(s_send,temp_send[k]) : temp_send[k]
         end
     end
+    ## Normalize
     for k in 1:K_f
       @inbounds link.ϕ_send[k] = exp(temp_send[k] - s_send)
     end
@@ -96,14 +112,15 @@ function update_ϕ_links_recv(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::F
   temp_recv = zeros(Float64, K_f)
   s_recv = zero(eltype(ϵ))
   S = eltype(ϵ)
-  dependence_dom = 5.0
+  dependence_dom = 10.0 ## to be used for the early iterations
   for k in 1:K_f
       @inbounds begin
-        dependence_dom = early ? 5.0 : (Elog_β[k,1]-log(ϵ))
+        dependence_dom = early ? 10.0 : (Elog_β[k,1]-log(ϵ))
         temp_recv[k] = (link.ϕ_send[k])*(dependence_dom) + (nodes_[link.second].Elog_Θ[k])
         s_recv = k > 1 ? logsumexp_f(s_recv,(temp_recv[k])) : (temp_recv[k])
       end
   end
+  ##Normalize
   for k in 1:K_f
       @inbounds link.ϕ_recv[k] = exp((temp_recv[k]) - s_recv)
   end
@@ -117,6 +134,7 @@ function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
     S = typeof(s_nsend)
     first = nonlink_f.first
     second = nonlink_f.second
+    ## dep2 is fed to the function which is like dependence_dom for early iterations
     for k in 1:K_f
         @inbounds begin
           dep = early_f ? dep2 : Elog_β_f[k,2]-log1p(1.0-ϵ_f)
@@ -124,6 +142,7 @@ function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
           s_nsend = k > 1 ? logsumexp_f(s_nsend,temp_nsend[k]) : temp_nsend[k]
         end
     end
+    ## Normalize
     for k in 1:K_f
         @inbounds nonlink_f.ϕ_nsend[k] = exp(temp_nsend[k] - s_nsend)
     end
@@ -135,6 +154,7 @@ function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
   S = typeof(ϵ_f)
   first = nonlink_f.first
   second = nonlink_f.second
+  ## dep2 is fed to the function which is like dependence_dom for early iterations
   for k in 1:K_f
       @inbounds begin
         dep = early_f ? dep2 : Elog_β_f[k,2]-log1p(1.0-ϵ_f)
@@ -142,99 +162,124 @@ function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
         s_nrecv = k > 1 ? logsumexp_f(s_nrecv,temp_nrecv[k]) : temp_nrecv[k]
       end
   end
+  ## Normalize
   for k in 1:K_f
       @inbounds nonlink_f.ϕ_nrecv[k] = exp(temp_nrecv[k] - s_nrecv)
   end
 end
+###Row normalize
+function row_normalize!(g_norm::Array{Float64,2}, g_node::Array{Float64,1}, id::Int64)
+    s_temp = zero(Float64)
+    len=length(g_node)
+    for k in 1:len
+        s_temp+=g_node[k]
+    end
+    for k in 1:len
+        g_norm[id,k] = g_node[k]/s_temp
+    end
+end
 
-sampled=false
-mb_nodes = Int64[]
-mb_links = Array{Pair{Int64,Int64},1}()
-mb_nonlinks = Array{Pair{Int64,Int64},1}()
-sampled_nonlinks=Array{NonLink,1}()
-sampled_links=Array{Link,1}()
-count = 1
+
 ####################E-step
 @inbounds for iter in 1:MAX_ITER
     tic();
     S = Float64
-    ρ_γ = 0.5*(102.0/(S(iter)-S(count)+102.0))^(0.5)
-    ρ_τ = 0.5*(102.0/(S(iter)-S(count)+102.0))^(0.9)
 
-    ####MB NODES
-    if !sampled
-        count=iter
-        sampled = !sampled
-        ##free the space
-        sampled_nonlinks=Array{NonLink,1}()
-        sampled_links=Array{Link,1}()
-        mb_nodes = Int64[]
-        mb_links = Array{Pair{Int64,Int64},1}()
-        mb_nonlinks = Array{Pair{Int64,Int64},1}()
-        mb_node_count=1
-        lid_count=1
-        nlid_count=1
-
-        while mb_node_count <= mb_num
-            r=ceil(Int64,rand()*nv(network))
-            if !(r in mb_nodes)
-                push!(mb_nodes,r)
-                mb_node_count+=1
+    sampled_nonlinks=Array{NonLink,1}()
+    ##free the space for NonLink objects
+    sampled_links=Array{Link,1}()
+    ##free the space for minibatch nodes
+    mb_nodes = Int64[]
+    ##free the space for minibatch links
+    mb_links = Array{Pair{Int64,Int64},1}()
+    ##free the space for minibatch nonlinks
+    mb_nonlinks = Array{Pair{Int64,Int64},1}()
+    mb_node_count=1
+    lid_count=1
+    nlid_count=1
+    ## Sample mb_num nodes
+    while mb_node_count <= mb_num
+        ## Choose a random index
+        r=ceil(Int64,rand()*nv(network))
+        ## make sure it is unique
+        if !(r in mb_nodes)
+            push!(mb_nodes,r)
+            mb_node_count+=1
+        end
+    end
+    #println(string(length(mb_nodes))," comment later")##Later comment
+    ## sample mb_links and mb_nonlinks
+    for nid in mb_nodes
+        l_count=0
+        ## all the outgoing pairs of a node nid
+        sink_pairs = [p for p in train_link_pairs if p.first == nid]
+        ## all the ingoing pairs of a node nid
+        source_pairs = [p for p in train_link_pairs if p.second == nid]
+        # merged shuffle pairs, so that no preference for ingoing or outgoing
+        ps = shuffle(vcat(sink_pairs, source_pairs))
+        for p in ps
+            ## Make sure it is unique
+            if  p in mb_links
+                continue;
+            else
+                ## add the link pair from the training set to the mb_links pairs, and sample_links Link objects
+                push!(mb_links,p)
+                push!(sampled_links,Link(lid_count,p.first, p.second, view(gamma_norm,p.first,1:K_), view(gamma_norm,p.second,1:K_)))
+                lid_count+=1
+                l_count+=1
             end
         end
+        ## number of links in the mb_links
+        mb_link_count = l_count
+        ## Sampling the mb_nonlinks
+        mb_nl_count = 1
+        isfrom=true
+        ## Sample the same number of nonlinks as number of sample links
+        while mb_nl_count <= mb_link_count
+            ## randomly select between outgoing and ingoing
+            isfrom=rand() > 0.5 ? true : false
+            if isfrom
+                ## choose a random nonsink
+                to=ceil(Int64,rand()*nv(network))
+                ## check if the sampled `to` node will satisfy a valid nonlink nid=>to in the training
+                ## check if current nid is not the same as the nonsink, nid=>to is neither in validation links or nonlinks
+                if nid != to && !(Pair{Int64, Int64}(nid,to) in val_link_pairs) && !(Pair{Int64, Int64}(nid,to) in val_nonlink_pairs)
+                    p = Pair(nid,to)
+                    ## Make sure it is unique
+                    if p in mb_nonlinks
+                        continue;
+                    else
+                        ## add the nonlink pair from the training set to the mb_nonlinks pairs, and sample_nonlinks NonLink objects
+                        push!(mb_nonlinks, p)
+                        push!(sampled_nonlinks,NonLink(nlid_count,p.first, p.second, view(gamma_norm,p.first,1:K_), view(gamma_norm,p.second,1:K_)))
+                        nlid_count+=1
+                        mb_nl_count+=1
+                    end
+                end
+                #isfrom=!isfrom
+            else
+                ## Choose a random nonsource
+                from=ceil(Int64,rand()*nv(network))
+                ## check if the sampled `from` node will satisfy a valid nonlink from=>nid in the training
+                ## check if current nid is not the same as the nonsource, from=>nid is neither in validation links or nonlinks
+                if from != nid && !(Pair{Int64, Int64}(from,nid) in val_link_pairs) && !(Pair{Int64, Int64}(from,nid) in val_nonlink_pairs)
 
-        for nid in mb_nodes
-            l_count=0
-            sink_pairs = [p for p in train_link_pairs if p.first == nid]
-            source_pairs = [p for p in train_link_pairs if p.second == nid]
-            ps = shuffle(vcat(sink_pairs, source_pairs))
-            for p in ps
-                if  p in mb_links
-                    continue;
-                else
-                    push!(mb_links,p)
-                    push!(sampled_links,Link(lid_count,p.first, p.second, view(node_ϕ_send,p.first,1:K_), view(node_ϕ_recv,p.second,1:K_)))
-                    lid_count+=1
-                    l_count+=1
-                end
-            end
-            mb_link_count = l_count
-            mb_nl_count = 1
-            isfrom=true
-            while mb_nl_count <= mb_link_count
-                if isfrom
-                    to=ceil(Int64,rand()*nv(network))
-                    if nid != to && !(Pair{Int64, Int64}(nid,to) in val_link_pairs_) && !(Pair{Int64, Int64}(nid,to) in val_nonlink_pairs_)
-                        #IT IS A TRAIN NONLINK
-                        p = Pair(nid,to)
-                        if p in mb_nonlinks
-                            continue;
-                        else
-                            push!(mb_nonlinks, p)
-                            push!(sampled_nonlinks,NonLink(nlid_count,p.first, p.second, view(node_ϕ_send,p.first,1:K_), view(node_ϕ_recv,p.second,1:K_)))
-                            nlid_count+=1
-                            mb_nl_count+=1
-                        end
+                    p = Pair(from,nid)
+                    ## Make sure it is unique
+                    if p in mb_nonlinks
+                        continue;
+                    else
+                        ## add the nonlink pair from the training set to the mb_nonlinks pairs, and sample_nonlinks NonLink objects
+                        push!(mb_nonlinks, p)
+                        push!(sampled_nonlinks,NonLink(nlid_count,p.first, p.second, view(gamma_norm,p.first,1:K_), view(gamma_norm,p.second,1:K_)))
+                        nlid_count+=1
+                        mb_nl_count+=1
                     end
-                    isfrom=!isfrom
-                else
-                    from=ceil(Int64,rand()*nv(network))
-                    if from != nid && !(Pair{Int64, Int64}(from,nid) in val_link_pairs_) && !(Pair{Int64, Int64}(from,nid) in val_nonlink_pairs_)
-                        #IT IS A TRAIN NONLINK
-                        p = Pair(from,nid)
-                        if p in mb_nonlinks
-                            continue;
-                        else
-                            push!(mb_nonlinks, p)
-                            push!(sampled_nonlinks,NonLink(nlid_count,p.first, p.second, view(node_ϕ_send,p.first,1:K_), view(node_ϕ_recv,p.second,1:K_)))
-                            nlid_count+=1
-                            mb_nl_count+=1
-                        end
-                    end
-                    isfrom=!isfrom
                 end
+                #isfrom=!isfrom
             end
         end
+    # end
     end
 
 
@@ -246,27 +291,41 @@ count = 1
 
     for nid in mb_nodes
         node = nodes_[nid]
+        ## Initialize the natural gradient updates for gamma at zero
         node.γ_nxt = zeros(Float64, K_)
+        ## Gammas are initialized at their value found by the initialization algorithm
         digamma_sums_γ = digamma(sum(node.γ))
         for k in 1:K_
             node.Elog_Θ[k] = digamma(node.γ[k]) - digamma_sums_γ
         end
     end
+    ## Gammas are initialized at prior value in Net2
     for k in 1:K_
         Elog_β[k,1] = digamma(τ[k,1]) - digamma(τ[k,1]+τ[k,2])
         Elog_β[k,2] = digamma(τ[k,2]) - digamma(τ[k,1]+τ[k,2])
     end
+    ## Initialize the natural gradient updates for tau at zero
     τ_nxt=zeros(Float64, (K_,2))
-    if iter == 50
+    ## For early iterations uses the dep2 and dependence_dom for the phi updates
+    if iter == 100
         early = false
     end
-    dependence_dom=5.0
+    dependence_dom=10.0
+
     ####This part has to change
+    ## We save the sum of the phis for sinks, nonsinks, sources, and nonsources
     sum_sink=zeros(Float64, (nv(network),K_))
     sum_src=zeros(Float64, (nv(network),K_))
+    sum_nonsrc=zeros(Float64, (nv(network),K_))
+    sum_nonsink=zeros(Float64, (nv(network),K_))
+    ## We keep track of the counts of sinks, nonsinks, sources, and nonsources for each node
     count_sink = zeros(Float64,nv(network))
     count_src = zeros(Float64,nv(network))
+    count_nonsink = zeros(Float64,nv(network))
+    count_nonsrc = zeros(Float64,nv(network))
+    ## We iterate over the sample_links as they are modifiable Link Objects
     for link in sampled_links
+        ## We alternate updating order of send vs recv
         if switch_rounds1
             update_ϕ_links_recv(link, Elog_β, ϵ, early, K_,dependence_dom,Utils.logsumexp)
             for k in 1:K_
@@ -294,13 +353,12 @@ count = 1
             τ_nxt[k,1] += link.ϕ_send[k]*link.ϕ_recv[k]
         end
     end
-    #len_train_nonlink_pairs = (nv(network)^2)-nv(network)-length(train_link_pairs)-len_val_pairs_
     dep2 = length(train_link_pairs)/(length(train_link_pairs)+len_train_nonlink_pairs_)
-    sum_nonsrc=zeros(Float64, (nv(network),K_))
-    sum_nonsink=zeros(Float64, (nv(network),K_))
-    count_nonsink = zeros(Float64,nv(network))
-    count_nonsrc = zeros(Float64,nv(network))
+    # length(Net2.train_link_pairs_)/(length(Net2.train_link_pairs_)+Net2.len_train_nonlink_pairs_)
+    # 100/8
+    ## We iterate over the sample_nonlinks as they are modifiable NonLink Objects
     for nonlink in sampled_nonlinks
+        ## We alternate updating order of send vs recv
         if switch_rounds1
             update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
             for k in 1:K_
@@ -315,14 +373,14 @@ count = 1
         else
             update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
             for k in 1:K_
-                sum_nonsink[nonlink.first,k] += nonlink.ϕ_nsend[k]
-            end
-            count_nonsink[nonlink.first]+=1
-            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
-            for k in 1:K_
                 sum_nonsrc[nonlink.second,k] += nonlink.ϕ_nrecv[k]
             end
             count_nonsrc[nonlink.second]+=1
+            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
+            for k in 1:K_
+                sum_nonsink[nonlink.first,k] += nonlink.ϕ_nsend[k]
+            end
+            count_nonsink[nonlink.first]+=1
         end
 
         for k in 1:K_
@@ -333,10 +391,10 @@ count = 1
         node = nodes_[nid]
         for k in 1:K_
             node.γ_nxt[k] =
-                sum_sink[nid,k]*(1.0*outdegree(train_net_,nid)/count_sink[nid]) +
-                sum_src[nid, k]*(1.0*indegree( train_net_,nid)/ count_src[nid]) +
-                sum_nonsink[nid,k]*(1.0*(nv(network)-1-outdegree(train_net_,nid)-outdegree(val_net_,nid))/count_nonsink[nid]) +
-                sum_nonsrc[nid,k] *(1.0*(nv(network)-1- indegree(train_net_,nid)- indegree(val_net_,nid))/ count_nonsrc[nid])
+                sum_sink[nid,k]*(1.0 * outdegree(train_net_,nid ) )/( count_sink[nid])  +
+                sum_src[nid, k]*(1.0 * indegree( train_net_,nid) ) /( count_src[nid])   +
+                sum_nonsink[nid,k]*(1.0 * len_train_nonsinks[nid]) /(count_nonsink[nid])+
+                sum_nonsrc[nid,k] *(1.0* len_train_nonsources[nid])/ (count_nonsrc[nid])
 
         end
     end
@@ -344,18 +402,19 @@ count = 1
 
     ###########################################################
     ###########################################################
-
+    ρ_τ = 0.5*(102.0/(S(iter)-S(count)+102.0))^(0.9)##smaller
     for nid in mb_nodes
         node=nodes_[nid]
+        ρ_γ[nid] = 0.5*(102.0/(S(iter)-S(count)+102.0))^(0.5)##larger
         for k in 1:K_
-            node.γ[k] = node.γ[k] *(1-ρ_γ) + (node.γ_nxt[k] + α[k])*ρ_γ
+            node.γ[k] = node.γ[k] *(1-ρ_γ[nid]) + (node.γ_nxt[k] + α[k])*ρ_γ[nid]
         end
+        row_normalize!(gamma_norm, node.γ, node.id)
     end
-
     for k in 1:K_
         τ[k,1] = τ[k,1] *(1-ρ_τ) + ((length(train_link_pairs)/length(mb_links))*τ_nxt[k,1] + η)*ρ_τ
 
-        τ[k,2] = τ[k,2] *(1-ρ_τ) + ((len_train_nonlink_pairs_/length(mb_nonlinks))*τ_nxt[k,2] +1.0)*ρ_τ
+        τ[k,2] = τ[k,2] *(1-ρ_τ) + ((len_train_nonlink_pairs/length(mb_nonlinks))*τ_nxt[k,2] +1.0)*ρ_τ
     end
 
     println("")
@@ -375,7 +434,7 @@ count = 1
         edge_lik = 0.0
         link_count = 0; nonlink_count = 0
 
-        for pair in collect(vcat(val_link_pairs,val_nonlink_pairs))
+        for pair in collect(val_pairs)
             edge_lik = edge_likelihood(network,pair, nodes_[pair.first].γ, nodes_[pair.second].γ, β_est, ϵ,K_)
             if has_edge(network, pair.first, pair.second)
                 link_count +=1
@@ -398,14 +457,18 @@ count = 1
         push!(store_ll, avg_lik)
         println(abs((prev_ll-avg_lik)/prev_ll))
 
-        if ((abs((prev_ll-avg_lik)/prev_ll) <= (1e-5)))
+        if ((abs((prev_ll-avg_lik)/prev_ll) <= (1e-4)))
             first_converge = true
             # anneal_γ = false
             # anneal_ϕ = false
             #println("sampling again")
-            println("nothing")
+            #println("sampling again")
             #sampled=false
+
         end
+        # if (abs((prev_ll-avg_lik)/prev_ll) <= (1e-6))
+        #     iter=MAX_ITER
+        # end
         prev_ll = avg_lik
         println("===================================================")
         print("loglikelihood: ")
