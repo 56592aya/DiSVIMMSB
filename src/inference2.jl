@@ -52,7 +52,7 @@ early = true
 save_iter=0
 save_iter_count=1
 #mb_num=nv(network) < 200 ? nv(network) : 200#round(Int64, nv(network)/1.5)##For now let's do them all
-mb_num=1
+mb_num=20
 Elog_β = zeros(Float64, (K_,2))
 τ_nxt = zeros(Float64, (K_,2))
 # sampled=false
@@ -90,7 +90,7 @@ function update_ϕ_links_send(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::F
     temp_send = zeros(Float64, K_f)
     s_send = zero(eltype(ϵ))
 
-    dependence_dom = 10.0 ## to be used for the early iterations
+    dependence_dom = 5.0 ## to be used for the early iterations
     for k in 1:K_f
         @inbounds begin
           dependence_dom = early ? 10.0 : (Elog_β[k,1]-log(ϵ))
@@ -103,15 +103,36 @@ function update_ϕ_links_send(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::F
       @inbounds link.ϕ_send[k] = exp(temp_send[k] - s_send)
     end
 end
+function update_ϕ_links_send(first::Int64,second::Int64,dict::Dict{Pair{Int64,Int64},Array{Pair{Float64,Float64},1}}, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)
+    temp_send = zeros(Float64, K_f)
+    s_send = zero(eltype(ϵ))
+
+    dependence_dom = 5.0 ## to be used for the early iterations
+    for k in 1:K_f
+        @inbounds begin
+          dependence_dom = early ? 5.0 : (Elog_β[k,1]-log(ϵ))
+          temp_send[k] = dict[first=>second][k].second*(dependence_dom) + nodes_[first].Elog_Θ[k]
+          s_send = k > 1 ? logsumexp_f(s_send,temp_send[k]) : temp_send[k]
+        end
+    end
+    ## Normalize
+    temp = zeros(Float64,K_f)
+    for k in 1:K_f
+      @inbounds temp[k] = exp(temp_send[k] - s_send)
+    end
+    dict[first=>second]=[Pair{Float64,Float64}(temp[k],dict[first=>second][k].second) for k in 1:K_f]
+    return dict[first=>second]
+end
+
 ###########################
 function update_ϕ_links_recv(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)::Void
   temp_recv = zeros(Float64, K_f)
   s_recv = zero(eltype(ϵ))
   S = eltype(ϵ)
-  dependence_dom = 10.0 ## to be used for the early iterations
+  dependence_dom = 5.0 ## to be used for the early iterations
   for k in 1:K_f
       @inbounds begin
-        dependence_dom = early ? 10.0 : (Elog_β[k,1]-log(ϵ))
+        dependence_dom = early ? 5.0 : (Elog_β[k,1]-log(ϵ))
         temp_recv[k] = (link.ϕ_send[k])*(dependence_dom) + (nodes_[link.second].Elog_Θ[k])
         s_recv = k > 1 ? logsumexp_f(s_recv,(temp_recv[k])) : (temp_recv[k])
       end
@@ -120,6 +141,26 @@ function update_ϕ_links_recv(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::F
   for k in 1:K_f
       @inbounds link.ϕ_recv[k] = exp((temp_recv[k]) - s_recv)
   end
+end
+function update_ϕ_links_recv(first::Int64,second::Int64,dict::Dict{Pair{Int64,Int64},Array{Pair{Float64,Float64},1}}, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)
+  temp_recv = zeros(Float64, K_f)
+  s_recv = zero(eltype(ϵ))
+  S = eltype(ϵ)
+  dependence_dom = 5.0 ## to be used for the early iterations
+  for k in 1:K_f
+      @inbounds begin
+        dependence_dom = early ? 5.0 : (Elog_β[k,1]-log(ϵ))
+        temp_recv[k] = (dict[first=>second][k].first)*(dependence_dom) + (nodes_[second].Elog_Θ[k])
+        s_recv = k > 1 ? logsumexp_f(s_recv,(temp_recv[k])) : (temp_recv[k])
+      end
+  end
+  ##Normalize
+  temp=zeros(Float64,K_f)
+  for k in 1:K_f
+      @inbounds temp[k] = exp((temp_recv[k]) - s_recv)
+  end
+  dict[first=>second]=[Pair{Float64,Float64}(dict[first=>second][k].first,temp[k]) for k in 1:K_f]
+  return dict[first=>second]
 end
 ###########################
 function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,dep2::Float64, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
@@ -141,6 +182,27 @@ function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
         @inbounds nonlink_f.ϕ_nsend[k] = exp(temp_nsend[k] - s_nsend)
     end
 end
+function update_ϕ_nonlink_send(first::Int64,second::Int64,dict::Dict{Pair{Int64,Int64},Array{Pair{Float64,Float64},1}}, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,dep2::Float64, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)
+    temp_nsend = zeros(Float64, K_f)
+    s_nsend = zero(eltype(ϵ_f))
+    S = typeof(s_nsend)
+
+    ## dep2 is fed to the function which is like dependence_dom for early iterations
+    for k in 1:K_f
+        @inbounds begin
+          dep = early_f ? dep2 : Elog_β_f[k,2]-log1p(1.0-ϵ_f)
+          temp_nsend[k] = dict[first=>second][k].second*(dep) + nodes_f[first].Elog_Θ[k]
+          s_nsend = k > 1 ? logsumexp_f(s_nsend,temp_nsend[k]) : temp_nsend[k]
+        end
+    end
+    ## Normalize
+    temp=zeros(Float64,K_f)
+    for k in 1:K_f
+        @inbounds temp[k] = exp(temp_nsend[k] - s_nsend)
+    end
+    dict[first=>second]=[Pair{Float64,Float64}(temp[k],dict[first=>second][k].second) for k in 1:K_f]
+    return dict[first=>second]
+end
 ###########################
 function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,dep2::Float64, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
   temp_nrecv = zeros(Float64, K_f)
@@ -161,6 +223,26 @@ function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
       @inbounds nonlink_f.ϕ_nrecv[k] = exp(temp_nrecv[k] - s_nrecv)
   end
 end
+function update_ϕ_nonlink_recv(first::Int64,second::Int64,dict::Dict{Pair{Int64,Int64},Array{Pair{Float64,Float64},1}}, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,dep2::Float64, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)
+  temp_nrecv = zeros(Float64, K_f)
+  s_nrecv = zero(eltype(ϵ_f))
+  S = typeof(ϵ_f)
+  ## dep2 is fed to the function which is like dependence_dom for early iterations
+  for k in 1:K_f
+      @inbounds begin
+        dep = early_f ? dep2 : Elog_β_f[k,2]-log1p(1.0-ϵ_f)
+        temp_nrecv[k] = dict[first=>second][k].first*(dep) + nodes_f[second].Elog_Θ[k]
+        s_nrecv = k > 1 ? logsumexp_f(s_nrecv,temp_nrecv[k]) : temp_nrecv[k]
+      end
+  end
+  ## Normalize
+  temp=zeros(Float64,K_f)
+  for k in 1:K_f
+      @inbounds temp[k] = exp(temp_nrecv[k] - s_nrecv)
+  end
+  dict[first=>second]=[Pair{Float64,Float64}(dict[first=>second][k].first,temp[k]) for k in 1:K_f]
+  return dict[first=>second]
+end
 ###########################
 ###Row normalize
 function row_normalize!(g_norm::Array{Float64,2}, g_node::Array{Float64,1}, id::Int64)
@@ -173,9 +255,17 @@ function row_normalize!(g_norm::Array{Float64,2}, g_node::Array{Float64,1}, id::
         g_norm[id,k] = g_node[k]/s_temp
     end
 end
+
 ###########################
+#ADDED NEW#
+links_dict=Dict{Pair{Int64,Int64},Array{Pair{Float64,Float64},1}}()
+nonlinks_dict=Dict{Pair{Int64,Int64},Array{Pair{Float64,Float64},1}}()
+
+#ADDED END#
+
 ####################E-step
 @inbounds for iter in 1:MAX_ITER
+
     tic();
     S = Float64
     sampled_nonlinks=Array{NonLink,1}()
@@ -202,6 +292,7 @@ end
     end
     ## sample mb_links and mb_nonlinks
     for nid in mb_nodes
+
         l_count=0
         ## all the outgoing pairs of a node nid
         sink_pairs = [p for p in train_link_pairs if p.first == nid]
@@ -211,12 +302,25 @@ end
         ps = shuffle(vcat(sink_pairs, source_pairs))
         for p in ps
             ## Make sure it is unique
+            #
+            try
+                if isempty(links_dict[p.first=>p.second])
+                    links_dict[p.first=>p.second]=[Pair{Float64,Float64}(gamma_norm[p.first,k],gamma_norm[p.first,k]) for k in 1:K_]
+                end
+            catch y
+                if isa(y,KeyError)
+                    links_dict[p.first=>p.second]=Array{Pair{Float64,Float64},1}()
+                    links_dict[p.first=>p.second]=[Pair{Float64,Float64}(gamma_norm[p.first,k],gamma_norm[p.first,k]) for k in 1:K_]
+                end
+            end
+            #
             if  p in mb_links
                 continue;
             else
                 ## add the link pair from the training set to the mb_links pairs, and sample_links Link objects
                 push!(mb_links,p)
                 push!(sampled_links,Link(lid_count,p.first, p.second, view(gamma_norm,p.first,1:K_), view(gamma_norm,p.second,1:K_)))
+
                 lid_count+=1
                 l_count+=1
             end
@@ -237,7 +341,18 @@ end
                 ## check if current nid is not the same as the nonsink, nid=>to is neither in validation links or nonlinks
                 if nid != to && !(Pair{Int64, Int64}(nid,to) in val_link_pairs) && !(Pair{Int64, Int64}(nid,to) in val_nonlink_pairs)
                     p = Pair(nid,to)
+                    try
+                        if isempty(nonlinks_dict[p.first=>p.second])
+                            nonlinks_dict[p.first=>p.second]=[Pair{Float64,Float64}(gamma_norm[p.first,k],gamma_norm[p.first,k]) for k in 1:K_]
+                        end
+                    catch y
+                        if isa(y,KeyError)
+                            nonlinks_dict[p.first=>p.second]=Array{Pair{Float64,Float64},1}()
+                            nonlinks_dict[p.first=>p.second]=[Pair{Float64,Float64}(gamma_norm[p.first,k],gamma_norm[p.first,k]) for k in 1:K_]
+                        end
+                    end
                     ## Make sure it is unique
+
                     if p in mb_nonlinks
                         continue;
                     else
@@ -257,6 +372,16 @@ end
                 if from != nid && !(Pair{Int64, Int64}(from,nid) in val_link_pairs) && !(Pair{Int64, Int64}(from,nid) in val_nonlink_pairs)
 
                     p = Pair(from,nid)
+                    try
+                        if isempty(nonlinks_dict[p.first=>p.second])
+                            nonlinks_dict[p.first=>p.second]=[Pair{Float64,Float64}(gamma_norm[p.first,k],gamma_norm[p.first,k]) for k in 1:K_]
+                        end
+                    catch y
+                        if isa(y,KeyError)
+                            nonlinks_dict[p.first=>p.second]=Array{Pair{Float64,Float64},1}()
+                            nonlinks_dict[p.first=>p.second]=[Pair{Float64,Float64}(gamma_norm[p.first,k],gamma_norm[p.first,k]) for k in 1:K_]
+                        end
+                    end
                     ## Make sure it is unique
                     if p in mb_nonlinks
                         continue;
@@ -276,6 +401,8 @@ end
     println()
     println("num minibatch links $(length(mb_links))")
     println("num minibatch nonlinks $(length(mb_nonlinks))")
+    println("num links met so far $(length(links_dict))")
+    println("num nonlinks met so far $(length(nonlinks_dict))")
     for nid in mb_nodes
         node = nodes_[nid]
         ## Initialize the natural gradient updates for gamma at zero
@@ -294,9 +421,9 @@ end
     ## Initialize the natural gradient updates for tau at zero
     τ_nxt=zeros(Float64, (K_,2))
     ## For early iterations uses the dep2 and dependence_dom for the phi updates
-    # if iter == 500
-    #     early = false
-    # end
+    if iter == 100
+        early = false
+    end
     dependence_dom=5.0
     ####This part has to change
     ## We save the sum of the phis for sinks, nonsinks, sources, and nonsources
@@ -311,32 +438,33 @@ end
     count_nonsrc = zeros(Float64,nv(network))
     ## We iterate over the sample_links as they are modifiable Link Objects
     for link in sampled_links
+
         ## We alternate updating order of send vs recv
         if switch_rounds1
-            update_ϕ_links_recv(link, Elog_β, ϵ, early, K_,dependence_dom,Utils.logsumexp)
+            links_dict[link.first=>link.second]=update_ϕ_links_recv(link.first,link.second,links_dict, Elog_β, ϵ, early, K_,dependence_dom,Utils.logsumexp)
             for k in 1:K_
-                sum_src[link.second,k] += link.ϕ_recv[k]
+                sum_src[link.second,k] += links_dict[link.first=>link.second][k].second
             end
             count_src[link.second]+=1
-            update_ϕ_links_send(link, Elog_β, ϵ, early, K_,dependence_dom,Utils.logsumexp)
+            links_dict[link.first=>link.second]=update_ϕ_links_send(link.first,link.second, links_dict, Elog_β, ϵ, early, K_,dependence_dom,Utils.logsumexp)
             for k in 1:K_
-                sum_sink[link.first,k] += link.ϕ_send[k]
+                sum_sink[link.first,k] += links_dict[link.first=>link.second][k].first
             end
             count_sink[link.first]+=1
         else
-            update_ϕ_links_send(link, Elog_β, ϵ, early, K_,dependence_dom,Utils.logsumexp)
+            links_dict[link.first=>link.second]=update_ϕ_links_send(link.first,link.second, links_dict, Elog_β, ϵ, early, K_,dependence_dom,Utils.logsumexp)
             for k in 1:K_
-                sum_sink[link.first,k] += link.ϕ_send[k]
+                sum_sink[link.first,k] += links_dict[link.first=>link.second][k].first
             end
             count_sink[link.first]+=1
-            update_ϕ_links_recv(link, Elog_β, ϵ, early, K_,dependence_dom,Utils.logsumexp)
+            links_dict[link.first=>link.second]=update_ϕ_links_recv(link.first,link.second,links_dict, Elog_β, ϵ, early, K_,dependence_dom,Utils.logsumexp)
             for k in 1:K_
-                sum_src[link.second,k] += link.ϕ_recv[k]
+                sum_src[link.second,k] += links_dict[link.first=>link.second][k].second
             end
             count_src[link.second]+=1
         end
         for k in 1:K_
-            τ_nxt[k,1] += link.ϕ_send[k]*link.ϕ_recv[k]
+            τ_nxt[k,1] += links_dict[link.first=>link.second][k].first*links_dict[link.first=>link.second][k].second
         end
     end
     dep2 = length(train_link_pairs)/(length(train_link_pairs)+len_train_nonlink_pairs_)
@@ -346,33 +474,34 @@ end
     for nonlink in sampled_nonlinks
         ## We alternate updating order of send vs recv
         if switch_rounds1
-            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
+            nonlinks_dict[nonlink.first=>nonlink.second]=update_ϕ_nonlink_send(nonlink.first,nonlink.second,nonlinks_dict, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
             for k in 1:K_
-                sum_nonsink[nonlink.first,k] += nonlink.ϕ_nsend[k]
+                sum_nonsink[nonlink.first,k] += nonlinks_dict[nonlink.first=>nonlink.second][k].first
             end
             count_nonsink[nonlink.first]+=1
-            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
+            nonlinks_dict[nonlink.first=>nonlink.second]=update_ϕ_nonlink_recv(nonlink.first, nonlink.second, nonlinks_dict, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
             for k in 1:K_
-                sum_nonsrc[nonlink.second,k] += nonlink.ϕ_nrecv[k]
+                sum_nonsrc[nonlink.second,k] += nonlinks_dict[nonlink.first=>nonlink.second][k].second
             end
             count_nonsrc[nonlink.second]+=1
         else
-            update_ϕ_nonlink_recv(nonlink, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
+            nonlinks_dict[nonlink.first=>nonlink.second]=update_ϕ_nonlink_recv(nonlink.first, nonlink.second, nonlinks_dict, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
             for k in 1:K_
-                sum_nonsrc[nonlink.second,k] += nonlink.ϕ_nrecv[k]
+                sum_nonsrc[nonlink.second,k] += nonlinks_dict[nonlink.first=>nonlink.second][k].second
             end
             count_nonsrc[nonlink.second]+=1
-            update_ϕ_nonlink_send(nonlink, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
+            nonlinks_dict[nonlink.first=>nonlink.second]=update_ϕ_nonlink_send(nonlink.first,nonlink.second,nonlinks_dict, Elog_β, ϵ,K_,dep2, nodes_, Utils.logsumexp,early)
             for k in 1:K_
-                sum_nonsink[nonlink.first,k] += nonlink.ϕ_nsend[k]
+                sum_nonsink[nonlink.first,k] += nonlinks_dict[nonlink.first=>nonlink.second][k].first
             end
             count_nonsink[nonlink.first]+=1
         end
 
         for k in 1:K_
-            τ_nxt[k,2] += nonlink.ϕ_nsend[k]*nonlink.ϕ_nrecv[k]
+            τ_nxt[k,2] += nonlinks_dict[nonlink.first=>nonlink.second][k].first*nonlinks_dict[nonlink.first=>nonlink.second][k].second
         end
     end
+    nonlinks_dict
     for nid in mb_nodes
         node = nodes_[nid]
         for k in 1:K_
@@ -392,7 +521,7 @@ end
         for k in 1:K_
             node.γ[k] = node.γ[k] *(1-ρ_γ[nid]) + (node.γ_nxt[k] + α[k])*ρ_γ[nid]
         end
-        row_normalize!(gamma_norm, node.γ, node.id)
+        #row_normalize!(gamma_norm, node.γ, node.id)
     end
     for k in 1:K_
         τ[k,1] = τ[k,1] *(1-ρ_τ) + ((length(train_link_pairs)/length(mb_links))*τ_nxt[k,1] + η)*ρ_τ
