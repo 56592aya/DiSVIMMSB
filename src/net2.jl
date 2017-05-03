@@ -67,6 +67,7 @@ while val_count <= ne(val_net_)
         val_count+=1
     end
 end
+
 len_val_pairs_ = length(val_pairs_)
 ## complement of a train network, to represnet nonlinks information, but larger than the actual nonlinks of the train.
 train_net_not_ = complement(train_net_)

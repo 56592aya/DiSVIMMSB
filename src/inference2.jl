@@ -13,7 +13,6 @@ using FLAGS
 using StatsBase
 using Distributions
 using LightGraphs
-
 ###############################################################
 ###############################################################
 println("num nodes: $(nv(network))")
@@ -30,7 +29,7 @@ const ϵ = copy(Net2.ϵ_)
 τ = deepcopy(Net2.τ_)
 const η = deepcopy(Net2.η_)
 nodes_ = deepcopy(Net2.nodes__)
-α = DGP.α_true#repeat([1.0/K_/5.0], outer=[K_]);#repeat([link_ratio/K_], outer=[K_]);
+α = repeat([DGP.α_true[1]],outer=[K_])#repeat([1.0/K_/5.0], outer=[K_]);#repeat([link_ratio/K_], outer=[K_]);
 train_link_pairs = deepcopy(Net2.train_link_pairs_)
 train_nonlink_pairs= deepcopy(Net2.train_nonlink_pairs_)
 len_train_nonlink_pairs = deepcopy(Net2.len_train_nonlink_pairs_)
@@ -49,7 +48,9 @@ store_ll = Array{Float64, 1}()
 first_converge = false
 switch_rounds1 = false
 switch_rounds2 = false
-early = false
+early = true
+save_iter=0
+save_iter_count=1
 #mb_num=nv(network) < 200 ? nv(network) : 200#round(Int64, nv(network)/1.5)##For now let's do them all
 mb_num=1
 Elog_β = zeros(Float64, (K_,2))
@@ -62,10 +63,6 @@ sampled_nonlinks=Array{NonLink,1}()
 sampled_links=Array{Link,1}()
 count = 1 ## used in the learning rate computation
 gamma_norm = Net2.node_ϕ_send ##OR Net2.node_ϕ_rec
-
-####
-#####
-
 ####################
 ##########################
 ##Computes the likelihood of a hypothetial link, whether it is actually a link or a nonlink
@@ -88,7 +85,6 @@ function edge_likelihood(network::DiGraph,pair::Pair{Int64,Int64}, γ_a::Array{F
     end
     return log(prob)::Float64
 end
-
 ###########################
 function update_ϕ_links_send(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)::Void
     temp_send = zeros(Float64, K_f)
@@ -107,7 +103,7 @@ function update_ϕ_links_send(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::F
       @inbounds link.ϕ_send[k] = exp(temp_send[k] - s_send)
     end
 end
-
+###########################
 function update_ϕ_links_recv(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::Float64, early::Bool, K_f::Int64,dependence_dom::Float64,logsumexp_f)::Void
   temp_recv = zeros(Float64, K_f)
   s_recv = zero(eltype(ϵ))
@@ -125,9 +121,7 @@ function update_ϕ_links_recv(link::Utils.Link, Elog_β::Array{Float64,2}, ϵ::F
       @inbounds link.ϕ_recv[k] = exp((temp_recv[k]) - s_recv)
   end
 end
-
-
-
+###########################
 function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,dep2::Float64, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
     temp_nsend = zeros(Float64, K_f)
     s_nsend = zero(eltype(ϵ_f))
@@ -147,7 +141,7 @@ function update_ϕ_nonlink_send(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
         @inbounds nonlink_f.ϕ_nsend[k] = exp(temp_nsend[k] - s_nsend)
     end
 end
-
+###########################
 function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float64,2}, ϵ_f::Float64,K_f::Int64,dep2::Float64, nodes_f::Array{Node,1}, logsumexp_f,early_f::Bool)::Void
   temp_nrecv = zeros(Float64, K_f)
   s_nrecv = zero(eltype(ϵ_f))
@@ -167,6 +161,7 @@ function update_ϕ_nonlink_recv(nonlink_f::Utils.NonLink, Elog_β_f::Array{Float
       @inbounds nonlink_f.ϕ_nrecv[k] = exp(temp_nrecv[k] - s_nrecv)
   end
 end
+###########################
 ###Row normalize
 function row_normalize!(g_norm::Array{Float64,2}, g_node::Array{Float64,1}, id::Int64)
     s_temp = zero(Float64)
@@ -178,13 +173,11 @@ function row_normalize!(g_norm::Array{Float64,2}, g_node::Array{Float64,1}, id::
         g_norm[id,k] = g_node[k]/s_temp
     end
 end
-
-
+###########################
 ####################E-step
 @inbounds for iter in 1:MAX_ITER
     tic();
     S = Float64
-
     sampled_nonlinks=Array{NonLink,1}()
     ##free the space for NonLink objects
     sampled_links=Array{Link,1}()
@@ -207,7 +200,6 @@ end
             mb_node_count+=1
         end
     end
-    #println(string(length(mb_nodes))," comment later")##Later comment
     ## sample mb_links and mb_nonlinks
     for nid in mb_nodes
         l_count=0
@@ -281,14 +273,9 @@ end
         end
     # end
     end
-
-
     println()
     println("num minibatch links $(length(mb_links))")
     println("num minibatch nonlinks $(length(mb_nonlinks))")
-
-
-
     for nid in mb_nodes
         node = nodes_[nid]
         ## Initialize the natural gradient updates for gamma at zero
@@ -307,11 +294,10 @@ end
     ## Initialize the natural gradient updates for tau at zero
     τ_nxt=zeros(Float64, (K_,2))
     ## For early iterations uses the dep2 and dependence_dom for the phi updates
-    if iter == 100
-        early = false
-    end
-    dependence_dom=10.0
-
+    # if iter == 500
+    #     early = false
+    # end
+    dependence_dom=5.0
     ####This part has to change
     ## We save the sum of the phis for sinks, nonsinks, sources, and nonsources
     sum_sink=zeros(Float64, (nv(network),K_))
@@ -398,9 +384,6 @@ end
 
         end
     end
-    ###########################################
-
-    ###########################################################
     ###########################################################
     ρ_τ = 0.5*(102.0/(S(iter)-S(count)+102.0))^(0.9)##smaller
     for nid in mb_nodes
@@ -416,7 +399,6 @@ end
 
         τ[k,2] = τ[k,2] *(1-ρ_τ) + ((len_train_nonlink_pairs/length(mb_nonlinks))*τ_nxt[k,2] +1.0)*ρ_τ
     end
-
     println("")
     println("Iteration $iter \tTook $(toc()) sec")
     for k in 1:K_
@@ -457,18 +439,10 @@ end
         push!(store_ll, avg_lik)
         println(abs((prev_ll-avg_lik)/prev_ll))
 
-        if ((abs((prev_ll-avg_lik)/prev_ll) <= (1e-4)))
+        if ((abs((prev_ll-avg_lik)/prev_ll) <= (1e-3)))
             first_converge = true
-            # anneal_γ = false
-            # anneal_ϕ = false
-            #println("sampling again")
-            #println("sampling again")
-            #sampled=false
-
+            early = false
         end
-        # if (abs((prev_ll-avg_lik)/prev_ll) <= (1e-6))
-        #     iter=MAX_ITER
-        # end
         prev_ll = avg_lik
         println("===================================================")
         print("loglikelihood: ")
