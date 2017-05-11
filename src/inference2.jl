@@ -50,21 +50,26 @@ const η = deepcopy(Net2.η_)
 nodes_ = deepcopy(Net2.nodes__)
 α = repeat([DGP.α_true[1]],outer=[K_])#repeat([1.0/K_/5.0], outer=[K_]);#repeat([link_ratio/K_], outer=[K_]);
 train_link_pairs = deepcopy(Net2.train_link_pairs_)
-train_nonlink_pairs= deepcopy(Net2.train_nonlink_pairs_)
-len_train_nonlink_pairs = length(train_nonlink_pairs)
+#train_nonlink_pairs= deepcopy(Net2.train_nonlink_pairs_)
+#len_train_nonlink_pairs = length(train_nonlink_pairs)
 train_sinks=deepcopy(Net2.train_sinks_)
 train_sources=deepcopy(Net2.train_sources_)
-train_nonsinks=deepcopy(Net2.train_nonsinks_)
-train_nonsources=deepcopy(Net2.train_nonsources_)
+#train_nonsinks=deepcopy(Net2.train_nonsinks_)
+#train_nonsources=deepcopy(Net2.train_nonsources_)
 # len_train_nonsinks = length(train_nonsinks)
 # len_train_nonsources = length(train_nonsources)
 train_outdegree=deepcopy(Net2.train_outdegree_)
 train_indegree=deepcopy(Net2.train_indegree_)
 train_nonoutdegree=deepcopy(Net2.train_nonoutdegree_)
 train_nonindegree=deepcopy(Net2.train_nonindegree_)
+val_outdegree=deepcopy(Net2.val_outdegree_)
+val_indegree=deepcopy(Net2.val_indegree_)
+val_nonoutdegree=deepcopy(Net2.val_nonoutdegree_)
+val_nonindegree=deepcopy(Net2.val_nonindegree_)
 val_pairs = deepcopy(val_pairs_)
 val_link_pairs = deepcopy(Net2.val_link_pairs_)
 val_nonlink_pairs = deepcopy(Net2.val_nonlink_pairs_)
+len_train_nonlink_pairs = deepcopy(Net2.len_train_nonlink_pairs_)
 # val_ratio = deepcopy(Net2.val_ratio_)
 ####
 ## Iteration variables
@@ -270,7 +275,7 @@ end
                 p = Pair{Int64,Int64}(nid,to)
                 if (nid != to) && !(p in val_pairs) && !(p in train_link_pairs)
                     ##check if it is in train_nonlink_pairs for now
-                    assert(p in train_nonlink_pairs)
+                    #assert(p in train_nonlink_pairs)
                     ## Make sure it is unique
                     if p in mb_nonlinks
                         continue;
@@ -291,7 +296,7 @@ end
                 p = Pair{Int64,Int64}(from,nid)
                 if (from != nid) && !(p in val_pairs) && !(p in train_link_pairs)
                     ##check if it is in train_nonlink_pairs for now
-                    assert(p in train_nonlink_pairs)
+                    #assert(p in train_nonlink_pairs)
                     ## Make sure it is unique
                     if p in mb_nonlinks
                         continue;
@@ -378,7 +383,7 @@ end
             τ_nxt[k,1] += link.ϕ_send[k]*link.ϕ_recv[k]
         end
     end
-    dep2 = length(train_link_pairs)/(length(train_link_pairs)+length(train_nonlink_pairs))
+    dep2 = length(train_link_pairs)/(length(train_link_pairs)+len_train_nonlink_pairs)
     # length(Net2.train_link_pairs_)/(length(Net2.train_link_pairs_)+Net2.len_train_nonlink_pairs_)
     # 100/8
     ## We iterate over the sample_nonlinks as they are modifiable NonLink Objects
@@ -440,7 +445,7 @@ end
     for k in 1:K_
         τ[k,1] = τ[k,1] *(1-ρ_τ) + ((length(train_link_pairs)/length(mb_links))*τ_nxt[k,1] + η)*ρ_τ
 
-        τ[k,2] = τ[k,2] *(1-ρ_τ) + ((length(train_nonlink_pairs)/length(mb_nonlinks))*τ_nxt[k,2] +1.0)*ρ_τ
+        τ[k,2] = τ[k,2] *(1-ρ_τ) + ((len_train_nonlink_pairs/length(mb_nonlinks))*τ_nxt[k,2] +1.0)*ρ_τ
     end
     println("")
     println("Iteration $iter \tTook $(toc()) sec")
