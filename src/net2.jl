@@ -19,67 +19,125 @@ data=readdlm("./network.txt",',',Int64)
 include("flags.jl")
 N_ = length(unique(vcat(data[:,1],data[:,2])))
 println("num total nodes: $N_")
+num_total_pairs_ = N_^2 - N_
+println("num total links: $(size(data,1))")
+println("num total nonlinks: $(num_total_pairs_-size(data,1))")
+println("num total pairs: $(num_total_pairs_)")
+
+
 network  = LightGraphs.DiGraph(N_)
-val_ratio_ = 0.25
+link_pairs_ = Array{Pair{Int64,Int64},1}()
+train_pairs_ = Array{Pair{Int64,Int64},1}()
 train_link_pairs_ = Array{Pair{Int64, Int64},1}()
+train_nonlink_pairs_ = Array{Pair{Int64, Int64},1}()
+train_edge_list_=Edge[]
+val_ratio_ = 0.05
 val_pairs_ = Array{Pair{Int64, Int64},1}()
 val_link_pairs_ = Array{Pair{Int64, Int64},1}()
-train_edge_list_=Edge[]
+val_nonlink_pairs_ = Array{Pair{Int64, Int64},1}()
 val_edge_list_=Edge[]
-for i in 1:size(data,1)
+vec_idx=shuffle(1:size(data,1))
+
+for i in vec_idx
     u=rand()
     a = data[i,1]
     b = data[i,2]
-    if u <= .125
+    push!(link_pairs_,Pair{Int64,Int64}(a,b))
+    if u <= val_ratio_/2.0
         push!(val_link_pairs_, Pair{Int64,Int64}(a,b))
-        push!(val_pairs_, Pair{Int64,Int64}(a,b))
+        push!(val_pairs_, Pair{Int64,Int64}(a,b))#nonlinks not yet added to this
         push!(val_edge_list_,Edge(a,b))
     else
-
         push!(train_link_pairs_, Pair{Int64,Int64}(a,b))
+        push!(train_pairs_, Pair{Int64,Int64}(a,b))#nonlinks not yet added to this
         push!(train_edge_list_,Edge(a,b))
     end
     LightGraphs.add_edge!(network, a, b)
 end
 
 adj_matrix = adj
-##Only link information in correct for the train_net_ and aval_net_ induced subgraphs
-train_net_,vmap_train_ = induced_subgraph(network, train_edge_list_)
-val_net_,vmap_val_ = induced_subgraph(network, val_edge_list_)
-##Give the nonlink information for the whole combined train+val
-network_not_=complement(network)
-val_nonlink_pairs_ = Array{Pair{Int64, Int64},1}()
-val_count=1
-## Pick the same number of nonlinks for the validation as its number of links
-while val_count <= ne(val_net_)
-    ## Choose a node at random in the network non link graph
-    u_from=ceil(Int64,rand()*nv(network_not_))
-    from= u_from
-    ## Choose one of its nonneighbors at random
-    u_to = ceil(Int64,rand()*length(edges(network_not_).adj[u_from]))
-    to=edges(network_not_).adj[u_from][u_to]
-    ## Unnecessary check though
-    ## if from=>to is not a a link in the train links and not a link in the validation add it to nonlink pairs
-    ## Unnecessary check though
-    if !has_edge(train_net_,from, to) && !(Pair(from, to) in val_link_pairs_)
-        push!(val_nonlink_pairs_, Pair{Int64,Int64}(from,to))
-        push!(val_pairs_, Pair{Int64,Int64}(from,to))
-        val_count+=1
+while length(val_nonlink_pairs_) < length(val_link_pairs_)
+    a = 1+floor(Int64,N_*rand())
+    b = 1+floor(Int64,N_*rand())
+    if a != b
+        pair = Pair{Int64,Int64}(a,b)
+        if pair in val_link_pairs_ ##   It is not a link in validation
+            continue;
+        elseif pair in train_pairs_##   It is not a link or a nonlink in train set
+            continue;
+        elseif pair in val_nonlink_pairs_ ## it was not chosen before
+            continue;
+        else
+            push!(val_nonlink_pairs_, pair)
+            push!(val_pairs_, pair)
+        end
     end
 end
+for a in 1:N_
+    for b in 1:N_
+        if a!=b
+            pair=Pair{Int64,Int64}(a,b)
+            if pair in val_pairs_## It is not in validation set
+                continue;
+            elseif pair in train_link_pairs_ ## It is not a link in training set
+                continue;
+            elseif pair in train_nonlink_pairs_ ##  It was not chosen before
+                continue;
+            else
+                push!(train_nonlink_pairs_, pair)
+                push!(train_pairs_, pair)
+            end
+        end
+    end
+end
+##CHECK:
+t1=length(train_pairs_) == (length(train_link_pairs_)+length(train_nonlink_pairs_))
+t2=length(val_pairs_) == (length(val_link_pairs_)+length(val_nonlink_pairs_))
+t3=size(data,1) == (length(val_link_pairs_) + length(train_link_pairs_))
+t4=(((N_^2)-N_)-size(data,1)) == (length(val_nonlink_pairs_) + length(train_nonlink_pairs_))
+t5=(((N_^2)-N_)) == (length(val_nonlink_pairs_) + length(val_link_pairs_) + length(train_nonlink_pairs_) + length(train_link_pairs_))
+if (t1 && t2 && t3 && t4 && t5)
+    println("Correct training and validation sets")
+else
+    println("Incorrect training and validation sets")
+end
+##END CHECK:
+train_outdegree_=zeros(Int64, N_)
+train_indegree_=zeros(Int64, N_)
+train_sinks_=Dict{Int64, Vector{Int64}}()
+train_sources_=Dict{Int64, Vector{Int64}}()
 
-len_val_pairs_ = length(val_pairs_)
-## complement of a train network, to represnet nonlinks information, but larger than the actual nonlinks of the train.
-train_net_not_ = complement(train_net_)
-incorrect_train_nonlink_pairs_ = [Pair(l.first,l.second) for (i,l) in enumerate(edges(train_net_not_))]
-##The count is important but not necessarily the pairs themselves.
-train_nonlink_pairs_ = setdiff(incorrect_train_nonlink_pairs_,val_nonlink_pairs_)
-len_train_nonlink_pairs_=length(train_nonlink_pairs_)
-len_train_nonsinks_ = zeros(Float64, nv(network))
-len_train_nonsources_ = zeros(Float64, nv(network))
-for np in train_nonlink_pairs_
-    len_train_nonsinks_[np.first] +=1
-    len_train_nonsources_[np.second] +=1
+for i in 1:length(train_link_pairs_)
+    train_outdegree_[train_link_pairs_[i].first]+=1
+    if !haskey(train_sinks_, train_link_pairs_[i].first)
+      train_sinks_[train_link_pairs_[i].first] = get(train_sinks_, train_link_pairs_[i].first, Int64[])
+    end
+
+    push!(train_sinks_[train_link_pairs_[i].first],train_link_pairs_[i].second)
+    train_indegree_[train_link_pairs_[i].second]+=1
+    if !haskey(train_sources_, train_link_pairs_[i].second)
+      train_sources_[train_link_pairs_[i].second] = get(train_sources_, train_link_pairs_[i].second, Int64[])
+    end
+
+    push!(train_sources_[train_link_pairs_[i].second],train_link_pairs_[i].first)
+end
+train_nonoutdegree_=zeros(Int64, N_)
+train_nonindegree_=zeros(Int64, N_)
+train_nonsinks_=Dict{Int64, Vector{Int64}}()
+train_nonsources_=Dict{Int64, Vector{Int64}}()
+for i in 1:length(train_nonlink_pairs_)
+    train_nonoutdegree_[train_nonlink_pairs_[i].first]+=1
+    if !haskey(train_nonsinks_, train_nonlink_pairs_[i].first)
+      train_nonsinks_[train_nonlink_pairs_[i].first] = get(train_nonsinks_, train_nonlink_pairs_[i].first, Int64[])
+    end
+
+    push!(train_nonsinks_[train_nonlink_pairs_[i].first],train_nonlink_pairs_[i].second)
+    train_nonindegree_[train_nonlink_pairs_[i].second]+=1
+    if !haskey(train_nonsources_, train_nonlink_pairs_[i].second)
+      train_nonsources_[train_nonlink_pairs_[i].second] = get(train_nonsources_, train_nonlink_pairs_[i].second, Int64[])
+    end
+
+    push!(train_nonsources_[train_nonlink_pairs_[i].second],train_nonlink_pairs_[i].first)
 end
 
 ###############################################################
@@ -167,8 +225,13 @@ println("num validation links $(length(val_link_pairs_))")
 println("num training links $(length(train_link_pairs_))")
 #############################
 
-export network,train_link_pairs_,val_link_pairs_,train_edge_list_,val_edge_list_,adj_matrix,val_nonlink_pairs_,train_net_,val_net_,len_val_pairs_
-export ϵ_,K_,τ_,η_,nodes__,node_ϕ_send,node_ϕ_recv,len_train_nonlink_pairs_,train_nonlink_pairs_,val_pairs_,len_train_nonsinks_,len_train_nonsources_
+export train_outdegree_,train_indegree_,train_sinks_,train_sources_,train_nonoutdegree_,train_nonindegree_,train_nonsinks_,train_nonsources_
+export ϵ_,K_,τ_,η_,nodes__,node_ϕ_send,node_ϕ_recv,num_total_pairs_,network,link_pairs_,train_pairs_,train_link_pairs_,train_nonlink_pairs_
+export train_edge_list_,val_pairs_,val_link_pairs_,val_nonlink_pairs_,val_edge_list_,adj_matrix
+
+
+
+
 ###############################################################
 ##############################################################
 

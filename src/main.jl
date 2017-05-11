@@ -6,6 +6,7 @@ include("utils.jl");include("flags.jl");include("dgp.jl");include("gopalan.jl");
 println(diag(DGP.β_true));diag(DGP.β_true)
 using Plots;using LightGraphs;
 include("inference2.jl")
+
 Plots.plot(1:length(Inference.store_ll), Inference.store_ll)
 gammas = zeros(Float64, (nv(Net2.network), Inference.K_));
 for i in 1:nv(Net2.network)

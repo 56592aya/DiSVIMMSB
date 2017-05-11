@@ -17,9 +17,9 @@ using Yeppp
 ###############################################################
 ###############################################################
 
-const N=250;
-const K_true=9;
-const α_el=1.0/K_true/5.0;
+const N=150;
+const K_true=4;
+const α_el=1.0/K_true/10.0;
 const ϵ_true=1e-30;
 const η_true=10;
 const seed = 1234
