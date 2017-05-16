@@ -5,7 +5,7 @@
 \usepackage[latin9]{inputenc}
 \usepackage{geometry}
 \geometry{verbose,tmargin=2cm,bmargin=2cm,lmargin=1.5cm,rmargin=1.5cm,headheight=1cm,headsep=1cm,footskip=0.5cm}
-\usepackage[active]{srcltx}
+\synctex=-1
 \usepackage{float}
 \usepackage{calc}
 \usepackage{amsmath}
@@ -20,7 +20,7 @@
 \floatname{algorithm}{\protect\algorithmname}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% User specified LaTeX commands.
-\usepackage{tikz}
+\usepackage{tikz} 
 %\usepackage{pgfplots}
 %\pgfplotsset{compat=<version>}
 \usepackage{inputenc}
@@ -244,5 +244,5 @@ More on sampling:
 At each iteration, we sample a minibatch of nodes(for now only one),
 and for each node in the minibatch we acuire all its training links
 and additionaly sample its training nonlinks uniformly at random for
-twice the size of its links.
+twice the size of its links. 
 \end{document}
