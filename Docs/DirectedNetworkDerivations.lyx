@@ -1,0 +1,546 @@
+#LyX 2.1 created this file. For more info see http://www.lyx.org/
+\lyxformat 474
+\begin_document
+\begin_header
+\textclass article
+\begin_preamble
+\usepackage{tikz} 
+%\usepackage{pgfplots}
+%\pgfplotsset{compat=<version>}
+\usepackage{inputenc}
+\end_preamble
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman default
+\font_sans default
+\font_typewriter default
+\font_math auto
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100
+\font_tt_scale 100
+\graphics default
+\default_output_format pdf2
+\output_sync 1
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry true
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\leftmargin 1.5cm
+\topmargin 2cm
+\rightmargin 1.5cm
+\bottommargin 2cm
+\headheight 1cm
+\headsep 1cm
+\footskip 0.5cm
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Standard
+The network generation is as follows:
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Float algorithm
+placement H
+wide false
+sideways false
+status open
+
+\begin_layout Plain Layout
+\begin_inset Formula $for\,\,a\in\mathcal{N}:$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Formula $\,\,\,\,\,\,\,\theta_{a}\sim Dir(\alpha_{[K]})$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Formula $for\,\,(a,b)\in\mathcal{N}\times\mathcal{N}:$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Formula $\,\,\,\,\,\,\,z_{a\rightarrow b}\sim Mult(\theta_{a})$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Formula $\,\,\,\,\,\,\,z_{a\leftarrow b}\sim Mult(\theta_{b})$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Formula $\,\,\,\,\,\,\,y(a,b)\sim Bern(z_{a\rightarrow b}^{T}B\,z_{a\leftarrow b})$
+\end_inset
+
+
+\end_layout
+
+\begin_layout Plain Layout
+\begin_inset Caption Standard
+
+\begin_layout Plain Layout
+Data generation process for the directed network
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The NIPS paper by Airoldi et al 2008 states that:
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Box Boxed
+position "t"
+hor_pos "c"
+has_inner_box 1
+inner_pos "t"
+use_parbox 0
+use_makebox 0
+width "100col%"
+special "none"
+height "1in"
+height_special "totalheight"
+status open
+
+\begin_layout Plain Layout
+
+\shape italic
+The indicator vector 
+\begin_inset Formula $z_{a\rightarrow b}$
+\end_inset
+
+ denotes the specific block membership of node 
+\begin_inset Formula $a$
+\end_inset
+
+ when it connects to node 
+\begin_inset Formula $b$
+\end_inset
+
+ , while 
+\begin_inset Formula $z_{a\leftarrow b}$
+\end_inset
+
+ denotes the specific block membership of node 
+\begin_inset Formula $b$
+\end_inset
+
+ when it is connected from node 
+\begin_inset Formula $a$
+\end_inset
+
+.
+\end_layout
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+So this means that the order of indexes indicates the order of potential
+ link, and the direction of the arrow indicates the potential behavior upon
+ initiation versus reception(I am still waiting to hear from Airoldi et
+ al to make sure, no luck yet!).
+ Consider the scenario of how an opion leader mayy interact with a follower
+ versus follower with an opinion leader(or expert or novice relationship).
+ Although the possibility of link in one direction should be very much higher
+ that the other way around in these scenarios if the group memberships differ.
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+We begin by writing down the ELBO:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L} & = & \underset{a}{\sum}\underset{b\in sink(a)}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & + & \underset{a}{\sum}\underset{b\in sink(a)}{\sum}\underset{k}{\sum\Big(1-}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big)log\,\epsilon\\
+ & + & \underset{a}{\sum}\underset{b\notin sink(a)}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & + & \underset{a}{\sum}\underset{b\notin sink(a)}{\sum}\underset{k}{\sum}\Big(1-\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big)\Big(log\,(1-\epsilon)\Big)\\
+ & + & \underset{a}{\sum}\underset{b}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & + & \underset{a}{\sum}\underset{b}{\sum}\underset{k}{\sum}\phi_{a\leftarrow b,k}\Big(\Psi(\gamma_{b,k})-\Psi(\sum_{h}\gamma_{b,h})\Big)\\
+ & + & \sum_{a}log\,\Gamma(\sum_{k}\alpha_{k})-\sum_{a}\sum_{k}log\,\Gamma(\alpha_{k})+\sum_{a}\sum_{k}(\alpha_{k}-1)\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & + & \sum_{k}log\,\Gamma(\eta_{0}+\eta_{1})-\sum_{k}log\,\Gamma(\eta_{0})-\sum_{k}log\,\Gamma(\eta_{1})\\
+ & + & \sum_{k}(\eta_{0}-1)\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)+\sum_{k}(\eta_{1}-1)\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & - & \underset{a}{\sum}\underset{b}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}log\,\phi_{a\rightarrow b,k}-\underset{a}{\sum}\underset{b}{\sum}\underset{k}{\sum}\phi_{a\leftarrow b,k}log\,\phi_{a\leftarrow b,k}\\
+ & - & \sum_{a}log\,\Gamma(\sum_{k}\gamma_{a,k})+\sum_{a}\sum_{k}log\,\Gamma(\gamma_{a,k})-\sum_{a}\sum_{k}(\gamma_{a,k}-1)\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & - & \sum_{k}log\,\Gamma(\tau_{k0}+\tau_{k1})+\sum_{k}log\,\Gamma(\tau_{k0})+\sum log\,\Gamma(\tau_{k1})\\
+ & - & \sum_{k}(\tau_{k0}-1)\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)-\sum_{k}(\tau_{k1}-1)\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})\Big)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+This can be further simplified dividing expressions between links and non
+ links as follows:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L} & = & \underset{a}{\sum}\underset{b\in sink(a)}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & + & \underset{a}{\sum}\underset{b\in sink(a)}{\sum}\underset{k}{\sum\Big(1-}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big)log\,\epsilon\\
+ & + & \underset{a}{\sum}\underset{b\notin sink(a)}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & + & \underset{a}{\sum}\underset{b\notin sink(a)}{\sum}\underset{k}{\sum}\Big(1-\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big)\Big(log\,(1-\epsilon)\Big)\\
+ & + & \underset{a}{\sum}\underset{b\in sink(a)}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & + & \underset{a}{\sum}\underset{b\notin sink(a)}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & + & \underset{a}{\sum}\underset{b\in source(a)}{\sum}\underset{k}{\sum}\phi_{b\leftarrow a,k}\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & + & \underset{a}{\sum}\underset{b\notin source(a)}{\sum}\underset{k}{\sum}\phi_{b\leftarrow a,k}\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & + & \sum_{a}log\,\Gamma(\sum_{k}\alpha_{k})-\sum_{a}\sum_{k}log\,\Gamma(\alpha_{k})+\sum_{a}\sum_{k}(\alpha_{k}-1)\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & + & \sum_{k}log\,\Gamma(\eta_{0}+\eta_{1})-\sum_{k}log\,\Gamma(\eta_{0})-\sum_{k}log\,\Gamma(\eta_{1})\\
+ & + & \sum_{k}(\eta_{0}-1)\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)+\sum_{k}(\eta_{1}-1)\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & - & \underset{a}{\sum}\underset{b\in sink(a)}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}log\,\phi_{a\rightarrow b,k}-\underset{a}{\sum}\underset{b\in source(a)}{\sum}\underset{k}{\sum}\phi_{b\leftarrow a,k}log\,\phi_{b\leftarrow a,k}\\
+ & - & \underset{a}{\sum}\underset{b\notin sink(a)}{\sum}\underset{k}{\sum}\phi_{a\rightarrow b,k}log\,\phi_{a\rightarrow b,k}-\underset{a}{\sum}\underset{b\notin source(a)}{\sum}\underset{k}{\sum}\phi_{b\leftarrow a,k}log\,\phi_{b\leftarrow a,k}\\
+ & - & \sum_{a}log\,\Gamma(\sum_{k}\gamma_{a,k})+\sum_{a}\sum_{k}log\,\Gamma(\gamma_{a,k})-\sum_{a}\sum_{k}(\gamma_{a,k}-1)\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & - & \sum_{k}log\,\Gamma(\tau_{k0}+\tau_{k1})+\sum_{k}log\,\Gamma(\tau_{k0})+\sum log\,\Gamma(\tau_{k1})\\
+ & - & \sum_{k}(\tau_{k0}-1)\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)-\sum_{k}(\tau_{k1}-1)\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})\Big)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Next we want to find the variational parameters that maximize the variational
+ lower bound:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L}\Big[\underset{a\rightarrow b}{\phi_{a\rightarrow b,k}}\Big] & = & \phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & - & \phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}log\,\epsilon\\
+ & + & \phi_{a\rightarrow b,k}\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & - & \phi_{a\rightarrow b,k}log\,\phi_{a\rightarrow b,k}\\
+ & = & \phi_{a\rightarrow b,k}\Bigg(\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)-\phi_{a\leftarrow b,k}log\,\epsilon\\
+ &  & +\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)-log\,\phi_{a\rightarrow b,k}\Bigg)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Hence maximizing 
+\begin_inset Formula $\mathcal{L}\Big[\underset{a\rightarrow b}{\phi_{a\rightarrow b,k}}\Big]$
+\end_inset
+
+ with respect to 
+\begin_inset Formula $\underset{a\rightarrow b}{\phi_{a\rightarrow b,k}}$
+\end_inset
+
+:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\dfrac{\partial\mathcal{L}\Big[\underset{a\rightarrow b}{\phi_{a\rightarrow b,k}}\Big]}{\partial\underset{a\rightarrow b}{\phi_{a\rightarrow b,k}}}\\
+=0 & \Longrightarrow & \Bigg(\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)-\phi_{a\leftarrow b,k}log\,\epsilon\\
+ &  & +\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)-log\,\phi_{a\rightarrow b,k}\Bigg)-1=0\\
+ & \Longrightarrow\\
+\underset{a\rightarrow b}{\phi_{a\rightarrow b,k}} & \propto & exp\Bigg(\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})-log\,\epsilon\Big)+\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\Bigg)\\
+ & \propto & \boxed{\epsilon^{-\phi_{a\leftarrow b,k}}\times exp\Bigg(\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)+\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\Bigg)}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Similarly for 
+\begin_inset Formula $\underset{a\rightarrow b}{\phi_{a\leftarrow b,k}}$
+\end_inset
+
+ we have:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L}\Big[\underset{a\rightarrow b}{\phi_{a\leftarrow b,k}}\Big] & = & \phi_{a\leftarrow b,k}\Bigg(\phi_{a\rightarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)-\phi_{a\rightarrow b,k}log\,\epsilon\\
+ &  & +\Psi(\gamma_{b,k})-\Psi(\sum_{h}\gamma_{b,h})-log\,\phi_{a\leftarrow b,k}\Big)\Bigg)\\
+\dfrac{\partial\mathcal{L}\Big[\underset{a\rightarrow b}{\phi_{a\leftarrow b,k}}\Big]}{\partial\underset{a\rightarrow b}{\phi_{a\leftarrow b,k}}}\\
+=0 & \Longrightarrow & \Bigg(\phi_{a\rightarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)-\phi_{a\rightarrow b,k}log\,\epsilon\\
+ &  & +\Psi(\gamma_{b,k})-\Psi(\sum_{h}\gamma_{b,h})-log\,\phi_{a\leftarrow b,k}\Big)\Bigg)-1=0\\
+\underset{a\rightarrow b}{\phi_{a\leftarrow b,k}} & \propto & exp\Bigg(\phi_{a\rightarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})-log\,\epsilon\Big)+\Big(\Psi(\gamma_{b,k})-\Psi(\sum_{h}\gamma_{b,h})\Big)\Bigg)\\
+ & \propto & \boxed{\epsilon^{-\phi_{a\rightarrow b,k}}\times exp\Bigg(\phi_{a\rightarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)+\Big(\Psi(\gamma_{b,k})-\Psi(\sum_{h}\gamma_{b,h})\Big)\Bigg)}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+For the case of the nonlinks we do not use the averaging over the links.
+ The assumption might produce extra bias for the directed case more than
+ that of the undirected graph.
+ Instead we update the 
+\begin_inset Formula $\phi$
+\end_inset
+
+'s for nonlinks and reduce the cost of computation by only sampling a portion
+ of them(here 
+\begin_inset Formula $2\times\#links$
+\end_inset
+
+).
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\underset{a\nrightarrow b}{\phi_{a\rightarrow b,k}} & \propto & exp\Bigg(\underset{a\nrightarrow b}{\phi_{a\leftarrow b,k}}\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})-log\,(1-\epsilon)\Big)+\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\Bigg)\\
+\underset{a\nrightarrow b}{\phi_{a\leftarrow b,k}} & \propto & exp\Bigg(\underset{a\nrightarrow b}{\phi_{a\rightarrow b,k}}\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})-log\,(1-\epsilon)\Big)+\Big(\Psi(\gamma_{b,k})-\Psi(\sum_{h}\gamma_{b,h})\Big)\Bigg)
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace medskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Turning into the global parameters for the full data:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L}\Big[\gamma_{a,k}\Big] & = & \Big(\sum_{b\in sink(a)}\phi_{a\rightarrow b,k}+\sum_{b\notin sink(a)}\phi_{a\rightarrow b,k}\Big)\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & + & \Big(\sum_{b\in source(a)}\phi_{b\leftarrow a,k}+\sum_{b\notin source(a)}\phi_{b\leftarrow a,k}\Big)\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)\\
+ & + & (\alpha_{k}-\gamma_{a,k})\Big(\Psi(\gamma_{a,k})-\Psi(\sum_{h}\gamma_{a,h})\Big)+log\,\Gamma(\gamma_{a,k})-log\,\Gamma(\sum_{h}\gamma_{a,h})\\
+\dfrac{\partial\mathcal{L}\Big[\gamma_{a,k}\Big]}{\partial\gamma_{a,k}} & = & 0\\
+ & \Longrightarrow & \Big(\Psi'(\gamma_{a,k})-\Psi'(\sum_{h}\gamma_{a,h})\Big)\Bigg(\sum_{b\in sink(a)}\phi_{a\rightarrow b,k}+\sum_{b\notin sink(a)}\phi_{a\rightarrow b,k}\\
+ &  & +\sum_{b\in source(a)}\phi_{b\leftarrow a,k}+\sum_{b\notin source(a)}\phi_{b\leftarrow a,k}+\alpha_{k}-\gamma_{a,k}\Bigg)=0\\
+\gamma_{a,k} & = & \alpha_{k}+\sum_{b\in sink(a)}\phi_{a\rightarrow b,k}+\sum_{b\notin sink(a)}\phi_{a\rightarrow b,k}+\sum_{b\in source(a)}\phi_{b\leftarrow a,k}+\sum_{b\notin source(a)}\phi_{b\leftarrow a,k}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Although with sampling of only portion of the nonlinks this will turn into:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+ &  & \alpha_{k}+\sum_{b\in sink(a)}\phi_{a\rightarrow b,k}+\tfrac{\#nonsinks_{train}(a)}{\#nonsinks_{minibatch}(a)}\times\sum_{b\notin sink(a)}\phi_{a\rightarrow b,k}+\sum_{b\in source(a)}\phi_{b\leftarrow a,k}+\tfrac{\#nonsources_{train}(a)}{\#nonsources_{minibatch}(a)}\times\sum_{b\notin source(a)}\phi_{b\leftarrow a,k}\\
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+For 
+\begin_inset Formula $\tau_{k0}$
+\end_inset
+
+ and 
+\begin_inset Formula $\tau_{k1}$
+\end_inset
+
+:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\mathcal{L}\Big[\tau_{k}\Big] & = & \sum_{a}\sum_{b\in sink(a)}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & + & \sum_{a}\sum_{b\notin sink(a)}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & + & (\eta_{0}-\tau_{k0})\Big(\Psi(\tau_{k0})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & + & (\eta_{1}-\tau_{k1})\Big(\Psi(\tau_{k1})-\Psi(\tau_{k0}+\tau_{k1})\Big)\\
+ & - & log\,\Gamma(\tau_{k0}+\tau_{k1})+log\,\Gamma(\tau_{k0})+log\,\Gamma(\tau_{k1})\\
+\dfrac{\partial\mathcal{L}\Big[\tau_{k}\Big]}{\partial\tau_{k}} & = & \begin{cases}
+\dfrac{\partial\mathcal{L}\Big[\tau_{k0}\Big]}{\partial\tau_{k0}} & =0\\
+\dfrac{\partial\mathcal{L}\Big[\tau_{k1}\Big]}{\partial\tau_{k1}} & =0
+\end{cases}\\
+ & \Longrightarrow & \begin{cases}
+\Big(\Psi'(\tau_{k0})-\Psi'(\tau_{k0}+\tau_{k1})\Big)\Bigg(\sum_{a}\sum_{b\in sink(a)}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}+\eta_{0}-\tau_{k0}\Bigg) & =0\\
+\Big(\Psi'(\tau_{k1})-\Psi'(\tau_{k0}+\tau_{k1})\Big)\Bigg(\sum_{a}\sum_{b\notin sink(a)}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}+\eta_{1}-\tau_{k1}\Bigg) & =0
+\end{cases}\\
+ & \Longrightarrow\\
+\tau_{k0} & = & \boxed{\eta_{0}+\sum_{a}\sum_{b\in sink(a)}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}}\\
+\tau_{k1} & = & \boxed{\eta_{1}+\sum_{a}\sum_{b\notin sink(a)}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+Since we do not sample all the links and nonlinks at each iteration we have
+ to reweigh these quantities as follows:
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+ &  & \eta_{0}+\tfrac{\#train\,links}{\#minibatch\,link}\sum_{a}\sum_{b\in sink(a)}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}\\
+ &  & \eta_{1}+\tfrac{\#train\,nonlinks}{\#minibatch\,nonmarkdownlinks}\sum_{a}\sum_{b\notin sink(a)}\phi_{a\rightarrow b,k}\phi_{a\leftarrow b,k}
+\end{eqnarray*}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+More on sampling:
+\end_layout
+
+\begin_layout Standard
+At each iteration, we sample a minibatch of nodes(for now only one), and
+ for each node in the minibatch we acuire all its training links and additionaly
+ sample its training nonlinks uniformly at random for twice the size of
+ its links.
+ 
+\end_layout
+
+\end_body
+\end_document

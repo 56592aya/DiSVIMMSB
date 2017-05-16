@@ -20,8 +20,13 @@ for i in 1:nv(Net2.network)
         est_Θ[i,k] = gammas[i,k]/sum(gammas[i,:])
     end
 end
+# est_Θ[1,:]
+# DGP.Θ_true[1,:]
 Plots.heatmap(est_Θ, yflip=true)
 Plots.heatmap(DGP.Θ_true, yflip=true)
+
+Utils.sort_by_argmax!(est_Θ)
+Plots.heatmap(est_Θ, yflip=true)
 
 # savefig("theta_est.png")
 open("./file2", "w") do f

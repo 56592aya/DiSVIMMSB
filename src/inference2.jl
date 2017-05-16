@@ -43,7 +43,7 @@ link_ratio = Float64(ne(network))/Float64(nv(network)*nv(network)-nv(network))
 #ϵ_,K_,τ_,η_,nodes__,
 #train_sinks_,train_sources_,train_nonsinks_,train_nonsources_
 ######
-const eval_every = 10;
+const eval_every = 1000;
 const ϵ = copy(Net2.ϵ_)
 τ = deepcopy(Net2.τ_)
 const η = deepcopy(Net2.η_)
@@ -314,9 +314,9 @@ end
     # end
     end
 
-    println()
-    println("num minibatch links $(length(mb_links))")
-    println("num minibatch nonlinks $(length(mb_nonlinks))")
+    # println()
+    # println("num minibatch links $(length(mb_links))")
+    # println("num minibatch nonlinks $(length(mb_nonlinks))")
     for nid in mb_nodes
         node = nodes_[nid]
         ## Initialize the natural gradient updates for gamma at zero
@@ -336,7 +336,7 @@ end
     τ_nxt=zeros(Float64, (K_,2))
     ## For early iterations uses the dep2 and dependence_dom for the phi updates
 
-    ExpectedAllSeen=round(Int64,nv(network)*sum([1.0/i for i in 1:nv(network)]))
+    ExpectedAllSeen=nv(network)*1.5#round(Int64,nv(network)*sum([1.0/i for i in 1:nv(network)]))
     if iter == round(Int64,ExpectedAllSeen)
         early = false
     end
@@ -430,12 +430,12 @@ end
     end
 
     ###########################################################
-    ρ_τ = (1024.0+S(iter))^(-.9)#0.5*((S(MAX_ITER)+2.0)/(S(iter)-S(count)+(S(MAX_ITER)+2.0)))^(0.9)##smaller
+    ρ_τ = (65536.0+S(iter))^(-.9)#0.5*((S(MAX_ITER)+2.0)/(S(iter)-S(count)+(S(MAX_ITER)+2.0)))^(0.9)##smaller
     for nid in mb_nodes
         times_node_seen[nid]+=1
         node=nodes_[nid]
         #ρ_γ[nid] = (1024.0+S(times_node_seen[nid]))^(-.5)#
-        ρ_γ[nid]=(1024.0+S(iter))^(-.5)
+        ρ_γ[nid]=(65536.0+S(iter))^(-.5)
 
         for k in 1:K_
             node.γ[k] = node.γ[k] *(1-ρ_γ[nid]) + (node.γ_nxt[k] + α[k])*ρ_γ[nid]
@@ -447,13 +447,13 @@ end
 
         τ[k,2] = τ[k,2] *(1-ρ_τ) + ((len_train_nonlink_pairs/length(mb_nonlinks))*τ_nxt[k,2] +1.0)*ρ_τ
     end
-    println("")
-    println("Iteration $iter \tTook $(toc()) sec")
-    for k in 1:K_
-        print(τ[k,1]/(τ[k,1]+τ[k,2]))
-        print("   ")
-    end
     if ((iter == 1) || (iter == FLAGS.MAX_ITER) || (iter % eval_every == 0))
+        println("")
+        println("Iteration $iter \tTook $(toc()) sec")
+        for k in 1:K_
+            print(τ[k,1]/(τ[k,1]+τ[k,2]))
+            print("   ")
+        end
         β_est = zeros(Float64, K_)
         for k in 1:K_
             β_est[k]=τ[k,1]/(τ[k,1]+τ[k,2])
